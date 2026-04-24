@@ -51,6 +51,9 @@ fi
 git add tx-rapper-tracker/app.html
 git add tx-rapper-tracker-backend/scripts/log-obsidian-phase-2b10.py
 git add tx-rapper-tracker-backend/scripts/save-progress.sh
+git add tx-rapper-tracker-backend/scripts/dedupe-obsidian-phase-2b10.py
+git add tx-rapper-tracker-backend/scripts/install-launchd-snapshot.sh
+git add tx-rapper-tracker-backend/src/routes/stats.js
 
 if git diff --cached --quiet; then
   echo "no staged changes - nothing to commit"

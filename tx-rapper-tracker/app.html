@@ -29,6 +29,16 @@
   header h1 { font-size: 1.3rem; font-weight: 700; color: var(--accent); letter-spacing: 1px; }
   header h1 span { color: var(--accent2); }
   .last-update { font-size: 0.75rem; color: var(--sub); }
+  /* Freshness badge — "Data as of Apr 19". Color flips from accent (fresh,
+     latest <= 1 day old) → amber (stale, 1-2 days) → red (very stale, >2d)
+     so a broken cron is noticeable without checking the server logs. */
+  .freshness-badge {
+    font-size: 0.7rem; padding: 3px 9px; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--sub); white-space: nowrap;
+  }
+  .freshness-badge.fresh { border-color: var(--accent); color: var(--accent); }
+  .freshness-badge.stale { border-color: #c7971f;       color: #d4a82d; }
+  .freshness-badge.dead  { border-color: #c84040;       color: #e06060; }
 
   .container { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
 
@@ -359,6 +369,21 @@
     transition: border-color 0.15s;
   }
   .detail-back:hover { border-color: var(--accent); }
+  /* Compare-toggle button sits on the right side of the detail header. Mirrors
+     .detail-back's shape so the row reads as a matched pair of pills, and
+     flips to a filled accent tint when the current artist is already in the
+     compare set. */
+  .detail-compare-toggle {
+    background: var(--card); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 14px; font-size: 0.8rem; cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, color 0.15s;
+    white-space: nowrap;
+  }
+  .detail-compare-toggle:hover { border-color: var(--accent); }
+  .detail-compare-toggle.on {
+    background: color-mix(in srgb, var(--accent) 18%, var(--card));
+    border-color: var(--accent); color: var(--accent);
+  }
   .detail-title { flex: 1; min-width: 0; }
   .detail-title h2 { font-size: 1.4rem; color: var(--accent); margin-bottom: 4px; word-wrap: break-word; }
   .detail-title .meta { font-size: 0.8rem; color: var(--sub); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -366,6 +391,45 @@
 
   .detail-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
   @media (max-width: 600px) { .detail-stats { grid-template-columns: repeat(2, 1fr); } }
+
+  /* ── Mobile polish (≤ 600px viewport) ──────────────────────────────────
+     Consolidated adjustments for narrow screens. The desktop layout assumes
+     1100px max-width; below 600px the header + detail-header + search-row
+     all need to relax to allow wrapping or stacking instead of overflowing. */
+  @media (max-width: 600px) {
+    /* Header: let auth widget wrap under the title instead of fighting for
+       horizontal space. Shrink the h1 a bit so the first row is tighter. */
+    header { flex-wrap: wrap; gap: 8px; padding: 12px 16px; }
+    header h1 { font-size: 1.1rem; }
+    .auth-widget { flex-wrap: wrap; row-gap: 6px; column-gap: 8px; font-size: 0.72rem; }
+    .auth-widget .who { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+    .last-update { order: 10; width: 100%; }
+    .freshness-badge { order: 9; }
+
+    /* Container padding - trim outer margins to recover usable width. */
+    .container { padding: 16px 12px; }
+
+    /* Search row: wrap the buttons onto a second line under the input. */
+    .search-row { flex-wrap: wrap; }
+    .search-row input { flex: 1 1 100%; min-width: 0; }
+    .search-row .btn { flex: 1 1 auto; }
+
+    /* Cards: shrink the compare-checkbox rail so the name has more room. */
+    .artist-card { padding-left: 32px; padding-right: 12px; }
+    .card-compare { left: 8px !important; }
+
+    /* Detail header: stack back + compare-toggle on their own row, let the
+       artist name take the full width below. */
+    .detail-header { flex-wrap: wrap; gap: 10px; }
+    .detail-title { order: 3; flex: 1 1 100%; }
+    .detail-compare-toggle { margin-left: auto; }
+    .detail-title h2 { font-size: 1.2rem; }
+
+    /* Compare bar: allow the pill to span nearly full width with a
+       comfortable side-gutter, keep buttons tappable. */
+    #compareBar { left: 12px; right: 12px; transform: none;
+                  justify-content: center; font-size: 0.8rem; }
+  }
   .detail-stat {
     background: var(--card); border: 1px solid var(--border);
     border-radius: 10px; padding: 14px 16px;
@@ -405,6 +469,7 @@
     <button class="btn link hidden" id="btnSignOut" data-action="signout">Sign out</button>
     <button class="btn sec hidden" id="btnSignIn" data-action="signin">Sign in</button>
     <button class="btn hidden" id="btnSignUp" data-action="signup">Create account</button>
+    <span class="freshness-badge hidden" id="freshness" title=""></span>
     <span class="last-update" id="lastUpdate">Loading data...</span>
   </div>
 </header>
@@ -582,6 +647,8 @@
           <span class="trend-badge trend-stable" id="detailTrend">Stable</span>
         </div>
       </div>
+      <button class="detail-compare-toggle" id="detailCompareToggle" type="button"
+              data-action="detail-toggle-compare">+ Add to compare</button>
     </div>
 
     <div class="detail-stats">
@@ -804,6 +871,12 @@ function wireStaticHandlers() {
         case 'auth-overlay-bg':   if (ev.target === t) { closeAuth(); } break;
         case 'save-to-roster':    saveCustomArtistToRoster(arg, t); break;
         case 'toggle-compare':    toggleCompare(arg); break;
+        case 'detail-toggle-compare':
+          // Same underlying toggle, but from the detail-page header; after
+          // flipping compareSet we re-sync the header button's label + tint.
+          toggleCompare(arg);
+          updateDetailCompareButton(arg);
+          break;
         case 'compare-go':        goToCompareView(); break;
         case 'compare-clear':     clearCompareSet(); break;
         case 'noop':              break;
@@ -1167,11 +1240,53 @@ async function refreshAll() {
   setStatus('ok', 'Data refreshed at ' + new Date().toLocaleTimeString());
   document.getElementById('lastUpdate').textContent = 'Updated ' + new Date().toLocaleTimeString();
 
+  // Kick off the freshness-badge update in parallel - its result doesn't
+  // gate the rest of the render so we don't await it.
+  refreshFreshnessBadge();
+
   // If a drill-down view is currently up, re-render it so the freshly
   // fetched stats + recent-videos replace any placeholders.
   if (document.body.classList.contains('detail-active')
    || document.body.classList.contains('compare-active')) {
     routeFromHash();
+  }
+}
+
+// ── FRESHNESS BADGE ──────────────────────────────────────────────────────
+// Calls /api/stats/freshness and renders a small pill in the header so
+// users can see at a glance how current the snapshot data is. The endpoint
+// is behind requireUser(), so we only fire it when we have a session.
+//
+// Color mapping (via CSS .fresh/.stale/.dead classes):
+//   <= 24h  → accent (fresh)
+//   24-48h  → amber  (stale)
+//   > 48h   → red    (dead - probably a broken cron)
+// If latestDay is null (empty table, snapshot has never run) we hide it.
+async function refreshFreshnessBadge() {
+  var el = document.getElementById('freshness');
+  if (!el) { return; }
+  if (!backendOk || !authUser) {
+    el.classList.add('hidden');
+    return;
+  }
+  try {
+    var r = await proxyGet('/api/stats/freshness');
+    if (!r || !r.latestDay) {
+      el.classList.add('hidden');
+      return;
+    }
+    var hours = r.hoursSinceLatest == null ? 999 : Number(r.hoursSinceLatest);
+    var cls = hours <= 24 ? 'fresh' : hours <= 48 ? 'stale' : 'dead';
+    // Pretty date: "Apr 19"
+    var d = new Date(r.latestDay + 'T12:00:00');
+    var mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()];
+    el.textContent = 'Data as of ' + mo + ' ' + d.getDate();
+    el.title = r.artistsOnLatest + ' of ' + r.totalArtistsTracked
+             + ' artists captured on ' + r.latestDay
+             + ' (' + Math.round(hours) + 'h ago)';
+    el.className = 'freshness-badge ' + cls;
+  } catch (_e) {
+    el.classList.add('hidden');
   }
 }
 
@@ -1668,6 +1783,19 @@ function hideArtistDetail() {
   if (detailChart) { detailChart.destroy(); detailChart = null; }
 }
 
+// Sync the detail-header compare-toggle button with compareSet. Called from
+// renderArtistDetail (on open) and after every toggle-compare dispatch.
+// The button's data-arg carries the current artist name so the dispatcher
+// can pass it straight to toggleCompare() without needing a global.
+function updateDetailCompareButton(name) {
+  var btn = document.getElementById('detailCompareToggle');
+  if (!btn) { return; }
+  var on = compareSet.has(name);
+  btn.setAttribute('data-arg', name);
+  btn.textContent = on ? '\u2713 In compare' : '+ Add to compare';
+  btn.classList.toggle('on', on);
+}
+
 function renderArtistDetail(a) {
   var meta = metaFor(a.name);
   var tc = a.trend === 'hot' ? 'trend-hot' : a.trend === 'up' ? 'trend-up' : 'trend-stable';
@@ -1683,6 +1811,11 @@ function renderArtistDetail(a) {
   document.getElementById('detailViews').textContent  = fmtNum(a.views || 0);
   document.getElementById('detailRecent').textContent = fmtNum(a.recentAvgViews || 0);
   document.getElementById('detailScore').textContent  = a.score || 0;
+
+  // Keep the header's compare-toggle button in sync with compareSet. Its
+  // data-arg is this artist's name, so the dispatcher can route clicks to
+  // toggleCompare(name) without a separate global.
+  updateDetailCompareButton(a.name);
 
   // Score breakdown — mirrors the formula in refreshAll(), exposed here
   // so users can see exactly how a ranking got its number.
