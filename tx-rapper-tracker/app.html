@@ -1,0 +1,1983 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TX Female Rapper Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0d0d0d;
+    --card: #161616;
+    --border: #2a2a2a;
+    --accent: #c8a84b;
+    --accent2: #e05c8a;
+    --text: #e8e8e8;
+    --sub: #888;
+    --up: #4ecb71;
+    --down: #e05c5c;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+  header {
+    background: linear-gradient(135deg, #1a0a1e 0%, #0d0d0d 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 18px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  header h1 { font-size: 1.3rem; font-weight: 700; color: var(--accent); letter-spacing: 1px; }
+  header h1 span { color: var(--accent2); }
+  .last-update { font-size: 0.75rem; color: var(--sub); }
+
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+
+  .search-row { display: flex; gap: 10px; margin-bottom: 24px; }
+  .search-row input {
+    flex: 1; background: var(--card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px; color: var(--text); font-size: 0.9rem;
+  }
+  .search-row input:focus { outline: none; border-color: var(--accent); }
+  .btn {
+    background: var(--accent); color: #000; border: none; border-radius: 8px;
+    padding: 10px 18px; font-weight: 700; cursor: pointer; font-size: 0.85rem;
+    transition: opacity 0.15s;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn.sec { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+
+  .section-title {
+    font-size: 0.75rem; font-weight: 700; letter-spacing: 2px;
+    color: var(--sub); text-transform: uppercase; margin-bottom: 14px;
+    border-left: 3px solid var(--accent); padding-left: 10px;
+  }
+
+  .artist-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 14px; margin-bottom: 32px;
+  }
+  .artist-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; cursor: pointer; transition: border-color 0.15s, transform 0.1s;
+    position: relative; overflow: hidden;
+  }
+  .artist-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .artist-card.active { border-color: var(--accent2); }
+  .artist-card .name { font-weight: 700; font-size: 0.95rem; margin-bottom: 4px; }
+  .artist-card .city { font-size: 0.75rem; color: var(--sub); margin-bottom: 10px; }
+  .artist-card .stat { font-size: 1.4rem; font-weight: 800; color: var(--accent); }
+  .artist-card .stat-label { font-size: 0.7rem; color: var(--sub); }
+  .trend-badge {
+    position: absolute; top: 12px; right: 12px;
+    font-size: 0.7rem; font-weight: 700; padding: 3px 7px; border-radius: 20px;
+  }
+  .trend-up   { background: rgba(78,203,113,0.15); color: var(--up); }
+  .trend-hot  { background: rgba(224,92,138,0.15);  color: var(--accent2); }
+  .trend-stable { background: rgba(136,136,136,0.15); color: var(--sub); }
+
+  /* Custom-search cards: tiny "Save to roster" button in the bottom-right */
+  .card-save {
+    position: absolute; bottom: 10px; right: 10px;
+    font-size: 0.7rem; font-weight: 600; padding: 4px 8px; border-radius: 6px;
+    background: rgba(232,179,84,0.12); color: var(--accent);
+    border: 1px solid rgba(232,179,84,0.35);
+    cursor: pointer; transition: background 0.15s, border-color 0.15s;
+  }
+  .card-save:hover { background: rgba(232,179,84,0.22); border-color: var(--accent); }
+  .card-save.saved { background: rgba(78,203,113,0.12); color: var(--up);
+                     border-color: rgba(78,203,113,0.35); cursor: default; }
+  .card-save[disabled] { opacity: 0.6; cursor: wait; }
+
+  .chart-row { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 32px; }
+  @media (max-width: 700px) { .chart-row { grid-template-columns: 1fr; } }
+  .chart-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px;
+  }
+  .chart-card h3 { font-size: 0.8rem; color: var(--sub); margin-bottom: 16px; text-transform: uppercase; letter-spacing: 1px; }
+  .chart-wrap { position: relative; height: 220px; }
+  .chart-note { margin-top: 10px; font-size: 0.72rem; color: var(--sub); font-style: italic; text-align: center; }
+
+  .rank-list { list-style: none; }
+  .rank-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+  }
+  .rank-item:last-child { border-bottom: none; }
+  .rank-num { font-size: 1.1rem; font-weight: 800; color: var(--border); width: 24px; text-align: center; }
+  .rank-info { flex: 1; }
+  .rank-info .rname { font-weight: 600; font-size: 0.9rem; }
+  .rank-info .rsub  { font-size: 0.72rem; color: var(--sub); }
+  .rank-score { font-weight: 700; color: var(--accent); font-size: 0.9rem; }
+
+  .metrics-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 32px; }
+  @media (max-width: 600px) { .metrics-row { grid-template-columns: repeat(2,1fr); } }
+  .metric-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px;
+  }
+  .metric-card .m-label { font-size: 0.7rem; color: var(--sub); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .metric-card .m-val   { font-size: 1.6rem; font-weight: 800; color: var(--text); }
+  .metric-card .m-sub   { font-size: 0.72rem; color: var(--sub); margin-top: 2px; }
+
+  .feed-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 32px; }
+  .feed-item {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px; display: flex; gap: 14px; align-items: flex-start;
+  }
+  .feed-thumb {
+    width: 64px; height: 48px; border-radius: 6px; object-fit: cover;
+    background: var(--border); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; color: var(--sub); font-size: 1.2rem;
+  }
+  .feed-info .feed-title { font-weight: 600; font-size: 0.88rem; margin-bottom: 4px; }
+  .feed-info .feed-meta  { font-size: 0.72rem; color: var(--sub); }
+  .feed-views { margin-left: auto; font-size: 0.8rem; color: var(--accent); font-weight: 700; white-space: nowrap; }
+
+  .status-bar {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 14px; font-size: 0.75rem; color: var(--sub); margin-bottom: 16px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--up); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .dot.loading { background: var(--accent); }
+  .dot.error   { background: var(--down); animation: none; }
+
+  .source-note {
+    font-size: 0.72rem; color: var(--sub); background: var(--card);
+    border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px;
+    margin-bottom: 24px; line-height: 1.6;
+  }
+  .source-note strong { color: var(--text); }
+  .source-note input {
+    width: 100%; background: #0d0d0d; border: 1px solid var(--border); border-radius: 6px;
+    padding: 8px 10px; color: var(--text); font-size: 0.8rem; margin-top: 6px;
+  }
+
+  /* DEMO BANNER */
+  .demo-banner {
+    background: #2a2200; border: 1px solid #c8a84b55; border-radius: 8px;
+    padding: 10px 14px; margin-bottom: 16px; font-size: 0.8rem; color: #c8a84b;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .demo-banner.hidden { display: none; }
+
+  /* REGIONAL BARS */
+  .region-row { margin-bottom: 32px; }
+  .region-item { margin-bottom: 12px; }
+  .region-label { display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 5px; }
+  .region-label span:first-child { color: var(--text); }
+  .region-label span:last-child  { color: var(--accent); font-weight: 700; }
+  .region-track { background: var(--border); border-radius: 4px; height: 8px; overflow: hidden; }
+  .region-fill  { height: 8px; border-radius: 4px; background: var(--accent); transition: width 0.8s ease; }
+
+  /* COMING SOON CARDS */
+  .roadmap-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 32px; }
+  @media (max-width: 600px) { .roadmap-grid { grid-template-columns: 1fr; } }
+  .roadmap-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px; opacity: 0.5; position: relative; overflow: hidden;
+  }
+  .roadmap-card .lock { font-size: 1.5rem; margin-bottom: 10px; }
+  .roadmap-card .phase-label { font-size: 0.7rem; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .roadmap-card .phase-title { font-weight: 700; font-size: 1rem; margin-bottom: 6px; }
+  .roadmap-card .phase-desc  { font-size: 0.78rem; color: var(--sub); line-height: 1.5; }
+  .roadmap-card .coming-tag {
+    position: absolute; top: 14px; right: 14px;
+    font-size: 0.65rem; font-weight: 700; padding: 3px 8px; border-radius: 20px;
+    background: rgba(200,168,75,0.15); color: var(--accent);
+  }
+
+  /* Global utility: force-hide any element regardless of its display value.
+     Needed because older styles scope .hidden per-element (.demo-banner.hidden). */
+  .hidden { display: none !important; }
+
+  /* AUTH WIDGET + MODAL */
+  .auth-widget { display: flex; align-items: center; gap: 10px; font-size: 0.78rem; }
+  .auth-widget .who  { color: var(--sub); }
+  .auth-widget .who b { color: var(--text); font-weight: 600; }
+  .auth-widget .btn  { padding: 6px 12px; font-size: 0.75rem; }
+  .auth-widget .btn.link {
+    background: transparent; color: var(--sub); padding: 6px 8px;
+    border: 1px solid transparent;
+  }
+  .auth-widget .btn.link:hover { color: var(--accent); }
+
+  .auth-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.72); z-index: 100;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .auth-overlay.hidden { display: none; }
+  .auth-modal {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 28px; width: 100%; max-width: 380px;
+  }
+  .auth-modal h2 { font-size: 1.05rem; color: var(--accent); margin-bottom: 6px; }
+  .auth-modal .hint { font-size: 0.75rem; color: var(--sub); margin-bottom: 18px; }
+  .auth-modal label {
+    display: block; font-size: 0.72rem; color: var(--sub);
+    text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;
+  }
+  .auth-modal input {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 0.85rem;
+    margin-bottom: 12px;
+  }
+  .auth-modal input:focus { outline: none; border-color: var(--accent); }
+  .auth-modal .row { display: flex; gap: 8px; margin-top: 6px; }
+  .auth-modal .row .btn { flex: 1; }
+  .auth-modal .err {
+    background: rgba(224,92,92,0.10); border: 1px solid rgba(224,92,92,0.35);
+    color: var(--down); font-size: 0.75rem; padding: 8px 10px; border-radius: 6px;
+    margin-bottom: 12px;
+  }
+  .auth-modal .err.hidden { display: none; }
+  .auth-modal .toggle { font-size: 0.75rem; color: var(--sub); text-align: center; margin-top: 12px; }
+  .auth-modal .toggle a { color: var(--accent); cursor: pointer; }
+
+  .signin-prompt {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px; margin-bottom: 20px; display: flex; gap: 14px; align-items: center;
+    flex-wrap: wrap;
+  }
+  .signin-prompt .msg { flex: 1; min-width: 200px; font-size: 0.85rem; }
+  .signin-prompt .msg b { color: var(--accent); }
+  .signin-prompt.hidden { display: none; }
+
+  /* Forgot-password link under the password field. Kept visually quiet — it's
+     only relevant on the login form, hidden in signup/forgot modes. */
+  .auth-modal .forgot-link {
+    display: block; text-align: right; font-size: 0.72rem;
+    color: var(--sub); margin-top: -2px; margin-bottom: 6px; cursor: pointer;
+  }
+  .auth-modal .forgot-link:hover { color: var(--accent); }
+  .auth-modal .forgot-link.hidden { display: none; }
+  .auth-modal .ok {
+    font-size: 0.8rem; color: var(--up);
+    border: 1px solid var(--up); border-radius: 8px; padding: 10px 12px;
+    margin-bottom: 12px;
+  }
+  .auth-modal .ok.hidden { display: none; }
+
+  /* Flash banner shown after a successful reset redirect back to /. */
+  .flash-banner {
+    background: var(--card); border: 1px solid var(--up); border-radius: 12px;
+    padding: 14px 18px; margin-bottom: 20px; display: flex; gap: 12px;
+    align-items: center; justify-content: space-between;
+    color: var(--up); font-size: 0.85rem;
+  }
+  .flash-banner.hidden { display: none; }
+  .flash-banner .close {
+    background: transparent; color: var(--sub); border: none; cursor: pointer;
+    font-size: 1rem; padding: 2px 8px;
+  }
+  .flash-banner .close:hover { color: var(--text); }
+
+  /* Full-page reset view. Shown only when /reset?token=... is loaded. */
+  .reset-view {
+    max-width: 420px; margin: 60px auto; padding: 24px;
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+  }
+  .reset-view.hidden { display: none; }
+  .reset-view h2 { color: var(--accent); font-size: 1.2rem; margin-bottom: 4px; }
+  .reset-view .sub { color: var(--sub); font-size: 0.8rem; margin-bottom: 18px; }
+  .reset-view .for-email {
+    font-size: 0.82rem; color: var(--text);
+    background: #0d0d0d; border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; margin-bottom: 18px;
+  }
+  .reset-view .for-email b { color: var(--accent); }
+  .reset-view label {
+    display: block; font-size: 0.72rem; color: var(--sub);
+    text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;
+  }
+  .reset-view input {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px; color: var(--text);
+    font-size: 0.9rem; margin-bottom: 12px;
+  }
+  .reset-view input:focus { outline: none; border-color: var(--accent); }
+  .reset-view .row { display: flex; gap: 8px; margin-top: 6px; }
+  .reset-view .row .btn { flex: 1; }
+  .reset-view .err, .reset-view .ok {
+    font-size: 0.8rem; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px;
+  }
+  .reset-view .err { color: var(--down); border: 1px solid var(--down); }
+  .reset-view .ok  { color: var(--up);   border: 1px solid var(--up); }
+  .reset-view .err.hidden, .reset-view .ok.hidden { display: none; }
+  .reset-view .hint {
+    font-size: 0.72rem; color: var(--sub); margin-top: 8px; line-height: 1.4;
+  }
+
+  /* ── Artist detail drill-down ──────────────────────────────────────────
+     Hash-routed single-artist view. When body.detail-active is set, the
+     rest of the dashboard (all direct children of .container except
+     #artistDetail) is hidden. No backend changes — this is pure client. */
+  body.detail-active .container > *:not(#artistDetail) { display: none !important; }
+  body.compare-active .container > *:not(#compareView) { display: none !important; }
+
+  /* Compare-mode card checkbox — tiny toggle in the top-left of each card.
+     Selection state is held in compareSet (Set of names). */
+  .card-compare {
+    position: absolute; top: 10px; left: 10px;
+    width: 20px; height: 20px; border-radius: 4px;
+    background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+    color: var(--sub); font-size: 0.8rem; font-weight: 700; line-height: 18px;
+    text-align: center; cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    user-select: none;
+  }
+  .card-compare:hover { border-color: var(--accent); color: var(--accent); }
+  .card-compare.on {
+    background: var(--accent); border-color: var(--accent); color: #1a120a;
+  }
+  .artist-card { padding-left: 40px; }
+
+  /* Floating "Compare N →" action bar — appears when 2+ cards are picked. */
+  #compareBar {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+    background: var(--card); border: 1px solid var(--accent);
+    border-radius: 999px; padding: 10px 18px;
+    display: flex; align-items: center; gap: 14px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    z-index: 80;
+  }
+  #compareBar .cb-count { font-size: 0.85rem; color: var(--text); }
+  #compareBar .cb-go {
+    background: var(--accent); color: #1a120a; border: none;
+    font-weight: 700; padding: 6px 14px; border-radius: 999px; cursor: pointer;
+  }
+  #compareBar .cb-clear {
+    background: transparent; color: var(--sub); border: none;
+    font-size: 0.8rem; cursor: pointer;
+  }
+  #compareBar .cb-clear:hover { color: var(--text); }
+
+  .detail-header { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+  .detail-back {
+    background: var(--card); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 14px; font-size: 0.8rem; cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .detail-back:hover { border-color: var(--accent); }
+  .detail-title { flex: 1; min-width: 0; }
+  .detail-title h2 { font-size: 1.4rem; color: var(--accent); margin-bottom: 4px; word-wrap: break-word; }
+  .detail-title .meta { font-size: 0.8rem; color: var(--sub); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .detail-title .meta .trend-badge { position: static; }
+
+  .detail-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  @media (max-width: 600px) { .detail-stats { grid-template-columns: repeat(2, 1fr); } }
+  .detail-stat {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px;
+  }
+  .detail-stat .ds-label { font-size: 0.7rem; color: var(--sub); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .detail-stat .ds-val   { font-size: 1.5rem; font-weight: 800; color: var(--text); }
+
+  .detail-panel {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px 20px; margin-bottom: 18px;
+  }
+  .detail-panel h3 {
+    font-size: 0.8rem; color: var(--sub); margin-bottom: 14px;
+    text-transform: uppercase; letter-spacing: 1px;
+  }
+  .detail-panel .chart-wrap { position: relative; height: 260px; }
+  .detail-panel .chart-note { margin-top: 10px; font-size: 0.72rem; color: var(--sub); font-style: italic; text-align: center; }
+
+  .bd-row {
+    display: flex; justify-content: space-between; gap: 12px;
+    padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 0.85rem;
+  }
+  .bd-row:last-child { border-bottom: none; }
+  .bd-row span:first-child { color: var(--sub); }
+  .bd-row span:last-child  { color: var(--text); font-weight: 600; white-space: nowrap; }
+  .bd-total { margin-top: 4px; }
+  .bd-total span:first-child { color: var(--accent); font-weight: 600; }
+  .bd-total span:last-child  { color: var(--accent); font-size: 1rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>TX Female Rapper <span>Tracker</span></h1>
+  <div class="auth-widget" id="authWidget">
+    <span class="who" id="authWho">&nbsp;</span>
+    <button class="btn link hidden" id="btnSignOut" data-action="signout">Sign out</button>
+    <button class="btn sec hidden" id="btnSignIn" data-action="signin">Sign in</button>
+    <button class="btn hidden" id="btnSignUp" data-action="signup">Create account</button>
+    <span class="last-update" id="lastUpdate">Loading data...</span>
+  </div>
+</header>
+
+<!-- Sign in / sign up / forgot-password modal -->
+<div class="auth-overlay hidden" id="authOverlay" data-action="auth-overlay-bg">
+  <div class="auth-modal">
+    <h2 id="authTitle">Sign in</h2>
+    <div class="hint" id="authHint">Sign in to load live YouTube + Trends data.</div>
+    <div class="err hidden" id="authErr"></div>
+    <div class="ok hidden" id="authOk"></div>
+    <form id="authForm" onsubmit="return submitAuth(event)" autocomplete="off">
+      <label>Email</label>
+      <input type="email" id="authEmail" required autocomplete="email" />
+      <div id="authPassWrap">
+        <label>Password</label>
+        <input type="password" id="authPass" minlength="1" autocomplete="current-password" />
+        <a class="forgot-link" id="forgotLink" data-action="auth-switch" data-arg="forgot">Forgot your password?</a>
+      </div>
+      <div class="row">
+        <button type="submit" class="btn" id="authSubmit">Sign in</button>
+        <button type="button" class="btn sec" data-action="auth-cancel">Cancel</button>
+      </div>
+    </form>
+    <div class="toggle" id="authToggle">No account? <a data-action="auth-switch" data-arg="signup">Create one</a></div>
+  </div>
+</div>
+
+<!-- Reset-password view. Shown only when the URL is /reset?token=... — the
+     onload handler flips it on and hides the main .container while this is up. -->
+<div class="reset-view hidden" id="resetView">
+  <h2>Reset password</h2>
+  <div class="sub" id="resetSub">Checking your reset link...</div>
+  <div class="err hidden" id="resetErr"></div>
+  <div class="ok hidden" id="resetOk"></div>
+  <div class="for-email hidden" id="resetForEmail"></div>
+  <form id="resetForm" onsubmit="return submitReset(event)" autocomplete="off" class="hidden">
+    <label>New password</label>
+    <input type="password" id="resetPass1" autocomplete="new-password" minlength="12" required />
+    <label>Confirm new password</label>
+    <input type="password" id="resetPass2" autocomplete="new-password" minlength="12" required />
+    <div class="hint">At least 12 characters. Avoid common or reused passwords.</div>
+    <div class="row">
+      <button type="submit" class="btn" id="resetSubmit">Set new password</button>
+    </div>
+  </form>
+  <div class="row hidden" id="resetBackRow">
+    <button type="button" class="btn sec" data-action="go-home">Back to sign in</button>
+  </div>
+</div>
+
+<div class="container" id="mainContainer">
+
+  <!-- Flash banner after a successful reset redirect -->
+  <div class="flash-banner hidden" id="flashBanner">
+    <span id="flashText"></span>
+    <button class="close" data-action="dismiss-flash" aria-label="dismiss">&times;</button>
+  </div>
+
+  <!-- Shown when backend is reachable but the user isn't signed in -->
+  <div class="signin-prompt hidden" id="signinPrompt">
+    <div class="msg"><b>Sign in required.</b> YouTube + Trends data is protected to keep API quota in check. Showing sample data until you sign in.</div>
+    <button class="btn" data-action="signin">Sign in</button>
+    <button class="btn sec" data-action="signup">Create account</button>
+  </div>
+
+  <div class="demo-banner hidden" id="demoBanner">
+    &#9888; Backend unreachable &mdash; Showing sample data. Start the proxy server (see tx-rapper-tracker-backend) for live data.
+  </div>
+
+  <div class="search-row">
+    <input type="text" id="searchInput" placeholder="Search artist or add custom..." />
+    <button class="btn" data-action="search">Search</button>
+    <button class="btn sec" data-action="refresh">Refresh</button>
+  </div>
+
+  <div class="status-bar" id="statusBar">
+    <span class="dot loading" id="statusDot"></span>
+    <span id="statusText">Fetching data from YouTube and Google Trends...</span>
+  </div>
+
+  <div class="metrics-row">
+    <div class="metric-card">
+      <div class="m-label">Artists Tracked</div>
+      <div class="m-val" id="mArtists">6</div>
+      <div class="m-sub">TX-based + comparison</div>
+    </div>
+    <div class="metric-card">
+      <div class="m-label">Total YT Views</div>
+      <div class="m-val" id="mViews">--</div>
+      <div class="m-sub">last 5 videos avg</div>
+    </div>
+    <div class="metric-card">
+      <div class="m-label">Trending Up</div>
+      <div class="m-val" id="mTrending">--</div>
+      <div class="m-sub">artists w/ rising score</div>
+    </div>
+    <div class="metric-card">
+      <div class="m-label">Top Artist</div>
+      <div class="m-val" id="mTop" style="font-size:1rem">--</div>
+      <div class="m-sub">by interest score</div>
+    </div>
+  </div>
+
+  <div class="section-title">Artists</div>
+  <div class="artist-grid" id="artistGrid"></div>
+
+  <div class="chart-row">
+    <div class="chart-card">
+      <h3>YouTube Subscribers (past year)</h3>
+      <div class="chart-wrap"><canvas id="trendsChart"></canvas></div>
+      <div id="trendsNote" class="chart-note" style="display:none"></div>
+    </div>
+    <div class="chart-card">
+      <h3>Interest Score Ranking</h3>
+      <ul class="rank-list" id="rankList"></ul>
+    </div>
+  </div>
+
+  <div class="section-title">Regional Interest</div>
+  <div class="region-row">
+    <div class="region-item">
+      <div class="region-label"><span>Americas (US, Latin America, Canada)</span><span>78%</span></div>
+      <div class="region-track"><div class="region-fill" style="width:78%"></div></div>
+    </div>
+    <div class="region-item">
+      <div class="region-label"><span>Africa &amp; Caribbean</span><span>65%</span></div>
+      <div class="region-track"><div class="region-fill" style="width:65%;background:var(--accent2)"></div></div>
+    </div>
+    <div class="region-item">
+      <div class="region-label"><span>Europe (UK, Germany, France)</span><span>52%</span></div>
+      <div class="region-track"><div class="region-fill" style="width:52%;background:#4ecb71"></div></div>
+    </div>
+  </div>
+
+  <div class="section-title">Latest YouTube Activity</div>
+  <div class="feed-list" id="feedList">
+    <div style="color:var(--sub);font-size:0.85rem;padding:20px 0">Loading videos...</div>
+  </div>
+
+  <div class="section-title">Coming Next</div>
+  <div class="roadmap-grid">
+    <div class="roadmap-card">
+      <span class="coming-tag">Phase 2</span>
+      <div class="lock">&#128274;</div>
+      <div class="phase-label">In Development</div>
+      <div class="phase-title">Hit Prediction Engine</div>
+      <div class="phase-desc">Upload an unreleased song and receive an AI-powered score for hit potential, regional heat map, age group breakdown, and specific suggestions to improve the track.</div>
+    </div>
+    <div class="roadmap-card">
+      <span class="coming-tag">Phase 3</span>
+      <div class="lock">&#128274;</div>
+      <div class="phase-label">In Development</div>
+      <div class="phase-title">Artist DNA Fingerprint</div>
+      <div class="phase-desc">Build a unique sonic and lyrical identity profile for any artist. Get alerts when a rising act is drifting into your lane. Know what makes your sound irreplaceable.</div>
+    </div>
+  </div>
+
+  <div class="source-note">
+    <strong>Data sources:</strong>
+    YouTube Data API v3 (search and statistics) &bull;
+    Google Trends (simulated via public patterns) &bull;
+    Data refreshes on page load. The browser never holds an API key &mdash; it calls the local proxy at 127.0.0.1:8787 which keeps the key server-side.
+  </div>
+
+  <!-- Artist detail drill-down. Hash-routed at #/artist/<name>. Hidden when
+       the main dashboard is up; body.detail-active hides everything else. -->
+  <div id="artistDetail" class="hidden">
+    <div class="detail-header">
+      <button class="detail-back" id="detailBack" type="button">&larr; Back to dashboard</button>
+      <div class="detail-title">
+        <h2 id="detailName">Artist</h2>
+        <div class="meta">
+          <span id="detailCity"></span>
+          <span class="trend-badge trend-stable" id="detailTrend">Stable</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="detail-stats">
+      <div class="detail-stat">
+        <div class="ds-label">Subscribers</div>
+        <div class="ds-val" id="detailSubs">--</div>
+      </div>
+      <div class="detail-stat">
+        <div class="ds-label">Lifetime views</div>
+        <div class="ds-val" id="detailViews">--</div>
+      </div>
+      <div class="detail-stat">
+        <div class="ds-label">Recent avg views</div>
+        <div class="ds-val" id="detailRecent">--</div>
+      </div>
+      <div class="detail-stat">
+        <div class="ds-label">Interest score</div>
+        <div class="ds-val" id="detailScore">--</div>
+      </div>
+    </div>
+
+    <div class="detail-panel">
+      <h3>Subscriber history (past year)</h3>
+      <div class="chart-wrap"><canvas id="detailChart"></canvas></div>
+      <div id="detailChartNote" class="chart-note" style="display:none"></div>
+    </div>
+
+    <div class="detail-panel">
+      <h3>Score breakdown</h3>
+      <div id="detailBreakdown"></div>
+    </div>
+
+    <div class="detail-panel">
+      <h3>Recent uploads</h3>
+      <div id="detailVideos"></div>
+    </div>
+  </div>
+
+  <!-- Compare-mode view. Hash-routed at #/compare/<name1>;<name2>;<name3>.
+       Shown when body.compare-active is set; everything else in .container
+       is hidden via CSS. Chart overlays 1-year subs for each picked artist. -->
+  <div id="compareView" class="hidden">
+    <div class="detail-header">
+      <button class="detail-back" id="compareBack" type="button">&larr; Back to dashboard</button>
+      <div class="detail-title">
+        <h2 id="compareTitle">Compare artists</h2>
+        <div class="meta"><span id="compareSubtitle">Subscriber history (past year)</span></div>
+      </div>
+    </div>
+    <div class="detail-panel" style="height: 500px;">
+      <canvas id="compareChart"></canvas>
+      <div class="chart-note" id="compareChartNote" style="display:none; text-align:center; margin-top:8px; font-size:0.8rem; color:var(--sub);"></div>
+    </div>
+  </div>
+
+  <!-- Floating action bar — appears when 2+ cards are picked for compare.
+       Population + show/hide managed by renderCompareBar(). -->
+  <div id="compareBar" class="hidden">
+    <span class="cb-count"><span id="cbCount">0</span> picked</span>
+    <button type="button" class="cb-go" data-action="compare-go">Compare &rarr;</button>
+    <button type="button" class="cb-clear" data-action="compare-clear">clear</button>
+  </div>
+
+</div>
+
+<script>
+// (c) 2026 Paul. All rights reserved.
+// TX Female Rapper Tracker — Phase 1 (Interest Dashboard)
+// Build: 2026-04-14
+
+// Roster of tracked artists is now driven by the backend `artists` table
+// (migration 006) so admins can add/archive artists without a deploy.
+// We still keep per-artist display metadata (city / ytQuery / trend) here
+// because those bits are presentation-only and aren't worth a migration —
+// new names added by an admin get the DEFAULT_META fallback below.
+var ARTIST_META = {
+  'Megan Thee Stallion': { city: 'Houston, TX',    ytQuery: 'Megan Thee Stallion new music 2025', trend: 'hot'    },
+  'Tay Money':           { city: 'N. Texas',       ytQuery: 'Tay Money rap 2025',                 trend: 'up'     },
+  'Asian Doll':          { city: 'Dallas, TX',     ytQuery: 'Asian Doll rap music video',         trend: 'stable' },
+  'Cuban Doll':          { city: 'Dallas, TX',     ytQuery: 'Cuban Doll rap music 2025',          trend: 'up'     },
+  'KenTheMan':           { city: 'Texas',          ytQuery: 'KenTheMan He Be Like rap',           trend: 'up'     },
+  'GloRilla':            { city: 'Memphis (ref)',  ytQuery: 'GloRilla new music 2025',            trend: 'hot'    }
+};
+function metaFor(name) {
+  return ARTIST_META[name] || { city: '',  ytQuery: name + ' rap music 2025', trend: 'stable' };
+}
+
+var COLORS = ['#c8a84b','#e05c8a','#4ecb71','#5c9de0','#e0935c','#a05ce0'];
+
+// Backend proxy. The API key lives server-side — never in the browser.
+// Same-origin by default (HTML served from the backend). For old-style
+// cross-origin local dev, set localStorage['tx_api_base'] = 'http://127.0.0.1:8787'.
+var PROXY_BASE = (typeof localStorage !== 'undefined' && localStorage.getItem('tx_api_base')) || '';
+var backendOk = true; // flipped to false if a proxy request fails
+var authUser = null;  // populated by checkSession(); null = signed out
+
+var artistData = [];
+var trendsChart = null;
+
+// ── INIT ──────────────────────────────────────────────────────────────────
+// Seed list — used before the roster API has replied and as a fallback if
+// the network request fails. Matches the DB seed so the page still works
+// offline / during a cold start.
+var SEED_NAMES = ['Megan Thee Stallion','Tay Money','Asian Doll','Cuban Doll','KenTheMan','GloRilla'];
+
+function buildArtistData(names) {
+  return names.map(function(n) {
+    return Object.assign({ name: n }, metaFor(n), { score: 0, views: 0, subCount: 0, videos: [] });
+  });
+}
+
+async function loadRoster() {
+  try {
+    var r = await fetch(PROXY_BASE + '/api/artists', { credentials: 'include' });
+    if (!r.ok) { throw new Error('HTTP ' + r.status); }
+    var body = await r.json();
+    var names = (body.rows || []).map(function(row) { return row.name; });
+    return names.length ? names : SEED_NAMES;
+  } catch (e) {
+    // Backend unreachable or signed-out — fall back to the seed list so
+    // the page still renders something in the demo banner state.
+    return SEED_NAMES;
+  }
+}
+
+window.onload = async function() {
+  // Seed artistData synchronously so any early render pass has something
+  // to iterate. The real list lands after loadRoster() below.
+  artistData = buildArtistData(SEED_NAMES);
+
+  // Password-reset short-circuit: if the URL has a ?token=..., this is a
+  // reset landing page. Show only the reset view, skip the main app fetch.
+  var params = new URLSearchParams(location.search);
+  var token  = params.get('token');
+  if (token) {
+    showResetView(token);
+    return;
+  }
+
+  // Flash banner after a successful reset redirect back to /.
+  if (params.get('reset') === 'ok') {
+    showFlash('Password reset complete. Sign in with your new password.');
+    // Clean the URL so a refresh doesn't keep the banner.
+    history.replaceState(null, '', location.pathname);
+  }
+
+  updateDemoBanner();
+  await checkSession();     // fills authUser if a valid cookie exists
+  renderAuthWidget();
+
+  // Pull the live roster once we know the session state. Signed-out users
+  // still see SEED_NAMES (loadRoster's 401 fallback) so the demo view works.
+  if (authUser) {
+    var names = await loadRoster();
+    artistData = buildArtistData(names);
+  }
+
+  // Hash-routed artist detail view. Listen for subsequent changes + route
+  // once on page load so deep-links like /#/artist/Megan%20Thee%20Stallion
+  // render something immediately (placeholder stats, chart lands on refresh).
+  window.addEventListener('hashchange', routeFromHash);
+  routeFromHash();
+
+  // CSP (script-src-attr 'none') blocks inline onclick handlers, so the
+  // artist cards and the detail-view Back button are wired here with
+  // event delegation instead of onclick="...".
+  wireStaticHandlers();
+
+  refreshAll();
+};
+
+// Idempotent-by-design: grid uses delegation so innerHTML replacements
+// during renderGrid() don't strip the listener. Back button is wired by id.
+//
+// Also installs a single document-level click dispatcher that handles every
+// [data-action] element on the page. CSP (script-src-attr 'none') kills
+// inline onclick="" attributes silently, so every button/link that used
+// to use onclick now carries data-action="..." instead.
+function wireStaticHandlers() {
+  var grid = document.getElementById('artistGrid');
+  if (grid && !grid.__wired) {
+    grid.addEventListener('click', function(ev) {
+      // Let the body-level [data-action] dispatcher handle clicks on
+      // buttons-inside-cards (e.g. "Save to roster"). Without this guard
+      // the card click would also fire and drill into the detail view.
+      if (ev.target.closest('[data-action]')) { return; }
+      var card = ev.target.closest('.artist-card');
+      if (!card || !grid.contains(card)) { return; }
+      var idx = parseInt(card.getAttribute('data-artist-index'), 10);
+      if (!isNaN(idx)) { focusArtist(idx); }
+    });
+    grid.__wired = true;
+  }
+  var back = document.getElementById('detailBack');
+  if (back && !back.__wired) {
+    back.addEventListener('click', function() { location.hash = ''; });
+    back.__wired = true;
+  }
+  var cmpBack = document.getElementById('compareBack');
+  if (cmpBack && !cmpBack.__wired) {
+    cmpBack.addEventListener('click', function() { location.hash = ''; });
+    cmpBack.__wired = true;
+  }
+  if (!document.body.__actionWired) {
+    document.body.addEventListener('click', function(ev) {
+      var t = ev.target.closest('[data-action]');
+      if (!t) { return; }
+      var action = t.getAttribute('data-action');
+      var arg    = t.getAttribute('data-arg');
+      switch (action) {
+        case 'search':            runSearch(); break;
+        case 'refresh':           refreshAll(); break;
+        case 'signin':            openAuth('login'); break;
+        case 'signup':            openAuth('signup'); break;
+        case 'signout':           signOut(); break;
+        case 'auth-cancel':       closeAuth(); break;
+        case 'auth-switch':       switchAuth(arg); break;
+        case 'dismiss-flash':     dismissFlash(); break;
+        case 'go-home':           location.href = '/'; break;
+        case 'auth-overlay-bg':   if (ev.target === t) { closeAuth(); } break;
+        case 'save-to-roster':    saveCustomArtistToRoster(arg, t); break;
+        case 'toggle-compare':    toggleCompare(arg); break;
+        case 'compare-go':        goToCompareView(); break;
+        case 'compare-clear':     clearCompareSet(); break;
+        case 'noop':              break;
+      }
+    });
+    document.body.__actionWired = true;
+  }
+}
+
+// ── FLASH BANNER (post-redirect) ──────────────────────────────────────────
+function showFlash(msg) {
+  var banner = document.getElementById('flashBanner');
+  document.getElementById('flashText').textContent = msg;
+  banner.classList.remove('hidden');
+}
+function dismissFlash() {
+  document.getElementById('flashBanner').classList.add('hidden');
+}
+
+function updateDemoBanner() {
+  var banner = document.getElementById('demoBanner');
+  if (banner) { banner.classList.toggle('hidden', backendOk); }
+  var prompt = document.getElementById('signinPrompt');
+  // Show the sign-in prompt only if the backend is reachable AND we're signed out.
+  // If the backend is down the demo banner takes over.
+  if (prompt) { prompt.classList.toggle('hidden', !backendOk || !!authUser); }
+}
+
+// Ask the backend who we are. 401 = signed out (not an error).
+async function checkSession() {
+  try {
+    var r = await fetch(PROXY_BASE + '/api/auth/me', { credentials: 'include' });
+    if (r.status === 401) { authUser = null; backendOk = true; updateDemoBanner(); return; }
+    if (!r.ok) { throw new Error('HTTP ' + r.status); }
+    var body = await r.json();
+    authUser = body.user || null;
+    backendOk = true;
+  } catch (e) {
+    // Network / DNS failure: treat as backend down.
+    authUser = null;
+    backendOk = false;
+  } finally {
+    updateDemoBanner();
+  }
+}
+
+// Small fetch helper. Sends the session cookie and distinguishes:
+//   401 → signed-out path (authUser = null, re-render)
+//   network / 5xx → backend down
+//   other → rethrow with server message
+async function proxyGet(path) {
+  try {
+    var r = await fetch(PROXY_BASE + path, { credentials: 'include' });
+    if (r.status === 401) {
+      authUser = null;
+      backendOk = true;
+      renderAuthWidget();
+      updateDemoBanner();
+      throw new Error('unauthenticated');
+    }
+    var body = await r.json().catch(function() { return {}; });
+    if (!r.ok) { throw new Error(body.message || ('HTTP ' + r.status)); }
+    backendOk = true;
+    updateDemoBanner();
+    return body;
+  } catch (e) {
+    if (e && e.message === 'unauthenticated') { throw e; }
+    backendOk = false;
+    updateDemoBanner();
+    throw e;
+  }
+}
+
+// ── AUTH UI ──────────────────────────────────────────────────────────────
+// 'login' | 'signup' | 'forgot'  — forgot has no password field and POSTs
+// to /api/auth/forgot. The success message is enumeration-safe (same
+// wording whether the email exists or not).
+var authMode = 'login';
+
+function renderAuthWidget() {
+  var who   = document.getElementById('authWho');
+  var btnOut = document.getElementById('btnSignOut');
+  var btnIn  = document.getElementById('btnSignIn');
+  var btnUp  = document.getElementById('btnSignUp');
+  if (authUser) {
+    who.innerHTML = 'Signed in as <b>' + escapeHtml(authUser.email) + '</b>';
+    btnOut.classList.remove('hidden');
+    btnIn.classList.add('hidden');
+    btnUp.classList.add('hidden');
+  } else {
+    who.innerHTML = '&nbsp;';
+    btnOut.classList.add('hidden');
+    btnIn.classList.remove('hidden');
+    btnUp.classList.remove('hidden');
+  }
+}
+
+function openAuth(mode) {
+  switchAuth(mode);
+  var err = document.getElementById('authErr');
+  var ok  = document.getElementById('authOk');
+  err.classList.add('hidden'); err.textContent = '';
+  ok.classList.add('hidden');  ok.textContent  = '';
+  document.getElementById('authEmail').value = '';
+  document.getElementById('authPass').value  = '';
+  document.getElementById('authOverlay').classList.remove('hidden');
+  setTimeout(function() { document.getElementById('authEmail').focus(); }, 30);
+}
+
+function closeAuth() { document.getElementById('authOverlay').classList.add('hidden'); }
+
+function switchAuth(mode) {
+  authMode = (mode === 'signup' || mode === 'forgot') ? mode : 'login';
+
+  // Clear any stale success message left over from a previous submit.
+  var ok = document.getElementById('authOk');
+  ok.classList.add('hidden'); ok.textContent = '';
+
+  var isSignup = authMode === 'signup';
+  var isForgot = authMode === 'forgot';
+  var isLogin  = authMode === 'login';
+
+  document.getElementById('authTitle').textContent =
+    isSignup ? 'Create account' :
+    isForgot ? 'Reset your password' :
+               'Sign in';
+
+  document.getElementById('authSubmit').textContent =
+    isSignup ? 'Create account' :
+    isForgot ? 'Send reset link' :
+               'Sign in';
+
+  document.getElementById('authHint').textContent =
+    isSignup ? 'Create an account to load live YouTube + Trends data. Password must be 12+ characters.' :
+    isForgot ? "Enter your email. We'll send a reset link if an account exists." :
+               'Sign in to load live YouTube + Trends data.';
+
+  // Toggle row: different call-to-action per mode.
+  document.getElementById('authToggle').innerHTML =
+    isSignup ? 'Have an account? <a data-action="auth-switch" data-arg="login">Sign in</a>' :
+    isForgot ? '<a data-action="auth-switch" data-arg="login">Back to sign in</a>' :
+               'No account? <a data-action="auth-switch" data-arg="signup">Create one</a>';
+
+  // Password field + Forgot-link are hidden in forgot mode.
+  var passWrap   = document.getElementById('authPassWrap');
+  var passInput  = document.getElementById('authPass');
+  var forgotLink = document.getElementById('forgotLink');
+
+  if (isForgot) {
+    passWrap.classList.add('hidden');
+    passInput.required = false;
+  } else {
+    passWrap.classList.remove('hidden');
+    passInput.required = true;
+    passInput.setAttribute('autocomplete', isSignup ? 'new-password' : 'current-password');
+  }
+  // Forgot link is only useful when someone is trying to sign in.
+  forgotLink.classList.toggle('hidden', !isLogin);
+}
+
+async function submitAuth(ev) {
+  ev.preventDefault();
+  var email = document.getElementById('authEmail').value.trim();
+  var pass  = document.getElementById('authPass').value;
+  var err   = document.getElementById('authErr');
+  var ok    = document.getElementById('authOk');
+  var btn   = document.getElementById('authSubmit');
+  err.classList.add('hidden'); err.textContent = '';
+  ok.classList.add('hidden');  ok.textContent  = '';
+
+  if (authMode === 'signup' && pass.length < 12) {
+    err.textContent = 'Password must be at least 12 characters.';
+    err.classList.remove('hidden');
+    return false;
+  }
+  btn.disabled = true;
+  try {
+    if (authMode === 'forgot') {
+      // Always 202; never reveals whether the email exists.
+      await fetch(PROXY_BASE + '/api/auth/forgot', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email })
+      });
+      // Show the enumeration-safe success message regardless of response.
+      ok.textContent = 'If an account exists for that email, a reset link is on its way. Check your inbox.';
+      ok.classList.remove('hidden');
+      return false;
+    }
+
+    var path = (authMode === 'signup') ? '/api/auth/signup' : '/api/auth/login';
+    var r = await fetch(PROXY_BASE + path, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email, password: pass })
+    });
+    var body = await r.json().catch(function() { return {}; });
+    if (!r.ok) { throw new Error(body.message || ('HTTP ' + r.status)); }
+    authUser = body.user;
+    backendOk = true;
+    renderAuthWidget();
+    updateDemoBanner();
+    closeAuth();
+    await refreshAll(); // now we can pull live data
+  } catch (e) {
+    err.textContent = (e && e.message) ? e.message : 'something went wrong';
+    err.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+  }
+  return false;
+}
+
+async function signOut() {
+  try {
+    await fetch(PROXY_BASE + '/api/auth/logout', { method: 'POST', credentials: 'include' });
+  } catch (_) { /* logout is best-effort */ }
+  authUser = null;
+  renderAuthWidget();
+  updateDemoBanner();
+  await refreshAll(); // will fall back to sample data since /api/youtube now 401s
+}
+
+// ── RESET VIEW ────────────────────────────────────────────────────────────
+// Shown when /reset?token=... is loaded. The flow is:
+//   1. Hide main container, show reset-view.
+//   2. Call GET /api/auth/reset/check to validate the token.
+//   3a. Bad token → show "link invalid or expired" + Back button.
+//   3b. Good token → show "resetting password for foo@bar" + new-password form.
+//   4. POST /api/auth/reset on submit. On 200, redirect to /?reset=ok.
+var resetToken = null; // set by showResetView
+
+async function showResetView(token) {
+  resetToken = token;
+
+  // Hide the main app chrome.
+  var mainC = document.getElementById('mainContainer');
+  if (mainC) mainC.style.display = 'none';
+
+  var view = document.getElementById('resetView');
+  view.classList.remove('hidden');
+
+  var sub      = document.getElementById('resetSub');
+  var err      = document.getElementById('resetErr');
+  var ok       = document.getElementById('resetOk');
+  var forEmail = document.getElementById('resetForEmail');
+  var form     = document.getElementById('resetForm');
+  var backRow  = document.getElementById('resetBackRow');
+
+  err.classList.add('hidden'); err.textContent = '';
+  ok.classList.add('hidden');  ok.textContent  = '';
+  forEmail.classList.add('hidden');
+  form.classList.add('hidden');
+  backRow.classList.add('hidden');
+
+  try {
+    var r = await fetch(PROXY_BASE + '/api/auth/reset/check?token=' + encodeURIComponent(token), {
+      credentials: 'include'
+    });
+    var body = await r.json().catch(function() { return {}; });
+
+    if (!r.ok || !body.ok) {
+      sub.textContent = '';
+      err.textContent = body.message || 'This reset link is invalid or has expired.';
+      err.classList.remove('hidden');
+      backRow.classList.remove('hidden');
+      return;
+    }
+
+    sub.textContent = 'Choose a new password.';
+    forEmail.innerHTML = 'Resetting password for <b>' + escapeHtml(body.email) + '</b>';
+    forEmail.classList.remove('hidden');
+    form.classList.remove('hidden');
+    setTimeout(function() { document.getElementById('resetPass1').focus(); }, 30);
+  } catch (e) {
+    sub.textContent = '';
+    err.textContent = "Couldn't reach the backend. Please try again.";
+    err.classList.remove('hidden');
+    backRow.classList.remove('hidden');
+  }
+}
+
+async function submitReset(ev) {
+  ev.preventDefault();
+  var p1  = document.getElementById('resetPass1').value;
+  var p2  = document.getElementById('resetPass2').value;
+  var err = document.getElementById('resetErr');
+  var ok  = document.getElementById('resetOk');
+  var btn = document.getElementById('resetSubmit');
+
+  err.classList.add('hidden'); err.textContent = '';
+  ok.classList.add('hidden');  ok.textContent  = '';
+
+  if (p1.length < 12) {
+    err.textContent = 'Password must be at least 12 characters.';
+    err.classList.remove('hidden');
+    return false;
+  }
+  if (p1 !== p2) {
+    err.textContent = "Passwords don't match.";
+    err.classList.remove('hidden');
+    return false;
+  }
+
+  btn.disabled = true;
+  try {
+    var r = await fetch(PROXY_BASE + '/api/auth/reset', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: resetToken, newPassword: p1 })
+    });
+    var body = await r.json().catch(function() { return {}; });
+    if (!r.ok) { throw new Error(body.message || ('HTTP ' + r.status)); }
+    // Success. Redirect to / with a flash flag; the onload handler shows
+    // the banner and strips the query string.
+    location.href = '/?reset=ok';
+  } catch (e) {
+    err.textContent = (e && e.message) ? e.message : 'Something went wrong.';
+    err.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+  }
+  return false;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, function(c) {
+    return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+  });
+}
+
+// ── MAIN REFRESH ──────────────────────────────────────────────────────────
+async function refreshAll() {
+  setStatus('loading', 'Fetching YouTube data...');
+  renderGrid();
+
+  var tasks = artistData.map(function(a, i) { return fetchArtistData(a, i); });
+  await Promise.allSettled(tasks);
+
+  // Log-scaled score: 10M subs ≈ 70, 1B lifetime views ≈ 45, 1M recent-avg ≈ 18,
+  // plus a small trend boost. Log scaling means a megastar doesn't trivially
+  // dominate — a smaller artist with a recent breakout still ranks well.
+  artistData.forEach(function(a) {
+    var subTerm    = Math.log10((a.subCount       || 0) + 1) * 10;
+    var viewTerm   = Math.log10((a.views          || 0) + 1) * 5;
+    var recentTerm = Math.log10((a.recentAvgViews || 0) + 1) * 3;
+    var trendBoost = a.trend === 'hot' ? 5 : a.trend === 'up' ? 3 : 0;
+    a.score = Math.round(subTerm + viewTerm + recentTerm + trendBoost);
+  });
+  artistData.sort(function(a, b) { return b.score - a.score; });
+
+  renderGrid();
+  renderMetrics();
+  renderRankList();
+  renderFeed();
+  renderTrendsChart();
+  document.getElementById('mArtists').textContent = artistData.length;
+  setStatus('ok', 'Data refreshed at ' + new Date().toLocaleTimeString());
+  document.getElementById('lastUpdate').textContent = 'Updated ' + new Date().toLocaleTimeString();
+
+  // If a drill-down view is currently up, re-render it so the freshly
+  // fetched stats + recent-videos replace any placeholders.
+  if (document.body.classList.contains('detail-active')
+   || document.body.classList.contains('compare-active')) {
+    routeFromHash();
+  }
+}
+
+// ── FETCH ARTIST ──────────────────────────────────────────────────────────
+// Pulls THREE stats per artist:
+//   subCount        — channel subscribers (channels.statistics.subscriberCount)
+//   views           — LIFETIME channel views (channels.statistics.viewCount)
+//   recentAvgViews  — avg view count across the last 5 uploads
+// The previous build overwrote `views` with `recentAvgViews`, which made big
+// artists with fresh uploads look tiny ("1K" for Megan). Keeping them separate
+// lets the score formula reward both stable scale and recent momentum.
+async function fetchArtistData(artist) {
+  if (!backendOk || !authUser) {
+    // Demo mode — backend is down OR we're signed out. Use plausible
+    // lifetime numbers so the card UI still looks right.
+    var seed = artist.name.charCodeAt(0) + artist.name.charCodeAt(4);
+    artist.subCount       = Math.floor((seed * 7919)  % 15000000 + 1000000);     // 1M..16M
+    artist.views          = Math.floor((seed * 31337) % 2000000000 + 100000000); // 100M..2.1B
+    artist.recentAvgViews = Math.floor((seed * 991)   % 5000000 + 50000);        // 50K..5M
+    artist.videos = [
+      { title: artist.name + ' — Latest Single', views: artist.recentAvgViews,                   url: '#', thumb: '', channel: artist.name },
+      { title: artist.name + ' — Music Video',   views: Math.floor(artist.recentAvgViews * 0.6), url: '#', thumb: '', channel: artist.name }
+    ];
+    return;
+  }
+
+  try {
+    // 1. Find channel (via proxy — key stays server-side)
+    var chRes  = await proxyGet(
+      '/api/youtube/search'
+      + '?q=' + encodeURIComponent(artist.name + ' rapper')
+      + '&type=channel&maxResults=1'
+    );
+    var chanId = chRes.items && chRes.items[0] && chRes.items[0].id && chRes.items[0].id.channelId;
+
+    if (chanId) {
+      var stRes = await proxyGet('/api/youtube/channel?id=' + encodeURIComponent(chanId));
+      var stats = (stRes.items && stRes.items[0] && stRes.items[0].statistics) || {};
+      artist.subCount = parseInt(stats.subscriberCount || 0);
+      artist.views    = parseInt(stats.viewCount       || 0); // lifetime channel views
+    }
+
+    // 2. Fetch recent videos (via proxy)
+    var vRes  = await proxyGet(
+      '/api/youtube/search'
+      + '?q=' + encodeURIComponent(artist.ytQuery)
+      + '&type=video&order=date&maxResults=5'
+    );
+    var items = (vRes.items) || [];
+
+    if (items.length) {
+      var ids     = items.map(function(v) { return v.id.videoId; }).join(',');
+      var vsRes   = await proxyGet('/api/youtube/videos?ids=' + encodeURIComponent(ids));
+      var statMap = {};
+      (vsRes.items || []).forEach(function(v) { statMap[v.id] = parseInt(v.statistics && v.statistics.viewCount || 0); });
+
+      artist.videos = items.map(function(v) {
+        return {
+          title:   v.snippet.title,
+          views:   statMap[v.id.videoId] || 0,
+          url:     'https://www.youtube.com/watch?v=' + v.id.videoId,
+          thumb:   v.snippet.thumbnails && v.snippet.thumbnails.default && v.snippet.thumbnails.default.url || '',
+          channel: v.snippet.channelTitle
+        };
+      });
+
+      // Recent-momentum signal, kept distinct from lifetime `views`.
+      var counts = artist.videos.map(function(v) { return v.views; }).filter(function(n) { return n > 0; });
+      artist.recentAvgViews = counts.length
+        ? Math.round(counts.reduce(function(a, b) { return a + b; }, 0) / counts.length)
+        : 0;
+    }
+  } catch (e) {
+    console.warn('YT fetch failed for ' + artist.name + ':', e.message);
+  }
+}
+
+// ── RENDER GRID ───────────────────────────────────────────────────────────
+function renderGrid() {
+  var grid = document.getElementById('artistGrid');
+  grid.innerHTML = artistData.map(function(a, i) {
+    var tc    = a.trend === 'hot' ? 'trend-hot' : a.trend === 'up' ? 'trend-up' : 'trend-stable';
+    var tl    = a.trend === 'hot' ? 'Hot' : a.trend === 'up' ? 'Rising' : 'Stable';
+    var vStr  = fmtNum(a.views);
+    var sStr  = fmtNum(a.subCount);
+    // data-artist-index wired via event delegation in wireStaticHandlers().
+    // Inline onclick is blocked by our CSP (script-src-attr 'none').
+    // Custom-search artists live only in memory until the admin promotes them
+    // to the roster via the Save button below, which POSTs /api/admin/artists.
+    var isCustom = a.city === 'Custom search';
+    var saveBtn  = '';
+    if (isCustom) {
+      saveBtn = a.savedToRoster
+        ? '<span class="card-save saved" data-action="noop">Saved \u2713</span>'
+        : '<button type="button" class="card-save" data-action="save-to-roster" data-arg="'
+          + escHtml(a.name) + '">+ Save</button>';
+    }
+    var picked = compareSet.has(a.name);
+    return '<div class="artist-card" data-artist-index="' + i + '">'
+      + '<span class="card-compare ' + (picked ? 'on' : '') + '" '
+      +       'data-action="toggle-compare" data-arg="' + escHtml(a.name) + '" '
+      +       'title="Pick for compare">' + (picked ? '\u2713' : '+') + '</span>'
+      + '<span class="trend-badge ' + tc + '">' + tl + '</span>'
+      + '<div class="name">' + escHtml(a.name) + '</div>'
+      + '<div class="city">' + escHtml(a.city) + '</div>'
+      + '<div class="stat">' + vStr + '</div>'
+      + '<div class="stat-label">lifetime views</div>'
+      + '<div style="margin-top:6px;font-size:0.8rem;color:var(--sub)">'
+      + sStr + ' subs &bull; Score: ' + a.score + '</div>'
+      + saveBtn
+      + '</div>';
+  }).join('');
+}
+
+// ── METRICS ───────────────────────────────────────────────────────────────
+function renderMetrics() {
+  var totalV   = artistData.reduce(function(s, a) { return s + a.views; }, 0);
+  var rising   = artistData.filter(function(a) { return a.trend === 'up' || a.trend === 'hot'; }).length;
+  document.getElementById('mViews').textContent    = fmtNum(totalV);
+  document.getElementById('mTrending').textContent = rising;
+  document.getElementById('mTop').textContent      = artistData.length ? artistData[0].name.split(' ')[0] : '--';
+}
+
+// ── RANK LIST ─────────────────────────────────────────────────────────────
+// Score is log-scaled: log10(subs)*10 + log10(lifetimeViews)*5 +
+// log10(recentAvgViews)*3 + trendBoost. That formula rewards recent
+// upload momentum, which is why a smaller-sub artist can outrank a
+// bigger one when their recent videos are pulling a lot more views.
+//
+// Hover a row to see the breakdown — helps users understand "why does
+// KenTheMan rank above Asian Doll" without them digging through code.
+function renderRankList() {
+  var sorted = artistData.slice().sort(function(a, b) { return b.score - a.score; });
+  document.getElementById('rankList').innerHTML = sorted.map(function(a, i) {
+    var subTerm    = Math.round(Math.log10((a.subCount       || 0) + 1) * 10 * 10) / 10;
+    var viewTerm   = Math.round(Math.log10((a.views          || 0) + 1) *  5 * 10) / 10;
+    var recentTerm = Math.round(Math.log10((a.recentAvgViews || 0) + 1) *  3 * 10) / 10;
+    var trendBoost = a.trend === 'hot' ? 5 : a.trend === 'up' ? 3 : 0;
+    var trendLabel = a.trend === 'hot' ? 'hot' : a.trend === 'up' ? 'rising' : 'stable';
+    var breakdown =
+      'Subs: ' + fmtNum(a.subCount || 0)          + '  (+' + subTerm    + ')\n' +
+      'Lifetime views: ' + fmtNum(a.views || 0)   + '  (+' + viewTerm   + ')\n' +
+      'Recent avg views: ' + fmtNum(a.recentAvgViews || 0) + '  (+' + recentTerm + ')\n' +
+      'Trend (editorial): ' + trendLabel          + '  (+' + trendBoost + ')\n' +
+      '= score ' + a.score;
+    return '<li class="rank-item" title="' + escHtml(breakdown) + '">'
+      + '<span class="rank-num">' + (i + 1) + '</span>'
+      + '<div class="rank-info"><div class="rname">' + escHtml(a.name) + '</div>'
+      + '<div class="rsub">' + escHtml(a.city) + '</div></div>'
+      + '<span class="rank-score">' + a.score + '</span>'
+      + '</li>';
+  }).join('');
+}
+
+// ── VIDEO FEED ────────────────────────────────────────────────────────────
+function renderFeed() {
+  var allVids = [];
+  artistData.forEach(function(a, ai) {
+    (a.videos || []).forEach(function(v) {
+      allVids.push(Object.assign({}, v, { artistName: a.name, color: COLORS[ai] }));
+    });
+  });
+  allVids.sort(function(a, b) { return b.views - a.views; });
+  allVids = allVids.slice(0, 10);
+
+  if (!allVids.length) {
+    document.getElementById('feedList').innerHTML =
+      '<div style="color:var(--sub);font-size:0.85rem;padding:20px 0">'
+      + 'No video data &mdash; is the backend proxy running on 127.0.0.1:8787?</div>';
+    return;
+  }
+
+  document.getElementById('feedList').innerHTML = allVids.map(function(v) {
+    var vStr = v.views > 1000000
+      ? (v.views / 1000000).toFixed(1) + 'M views'
+      : v.views > 1000
+        ? Math.round(v.views / 1000) + 'K views'
+        : 'Demo';
+    var thumb = v.thumb
+      ? '<img class="feed-thumb" src="' + v.thumb + '" alt="">'
+      : '<div class="feed-thumb">&#127925;</div>';
+    var link = (v.url && v.url !== '#') ? 'href="' + v.url + '" target="_blank"' : '';
+    return '<div class="feed-item">'
+      + thumb
+      + '<div class="feed-info">'
+      + '<div class="feed-title"><a ' + link + ' style="color:var(--text);text-decoration:none">'
+      + escHtml(v.title) + '</a></div>'
+      + '<div class="feed-meta" style="color:' + v.color + '">' + escHtml(v.artistName) + '</div>'
+      + '</div><span class="feed-views">' + vStr + '</span></div>';
+  }).join('');
+}
+
+// ── TRENDS CHART ──────────────────────────────────────────────────────────
+// Real data path: GET /api/stats/history?artist=...&days=365 per top-4
+// artist (in parallel). The endpoint returns rows oldest-first; we plot
+// `subs` over `day`. For days an artist has no row we leave a gap — Chart.js
+// connects across gaps via spanGaps.
+//
+// Synthetic fallback: if EVERY artist comes back empty (fresh DB, demo
+// mode, or stats endpoint disabled), we render the old noise+drift curve
+// so the panel never sits blank.
+async function renderTrendsChart() {
+  var ctx = document.getElementById('trendsChart').getContext('2d');
+  var top = artistData.slice(0, 4);
+
+  // Pull all artists in parallel. Failures degrade to "no rows" — we don't
+  // want one timeout to nuke the whole chart.
+  var histories = await Promise.all(top.map(async function(a) {
+    try {
+      var r = await proxyGet('/api/stats/history?artist=' + encodeURIComponent(a.name) + '&days=365');
+      return (r && Array.isArray(r.rows)) ? r.rows : [];
+    } catch (_) {
+      return [];
+    }
+  }));
+
+  var anyReal = histories.some(function(rows) { return rows.length > 0; });
+
+  // Cold-start UX: surface a small caption while the series is too short
+  // to read as a trend (1 day = single dot, 2 days = barely a line).
+  // Hidden once we have ≥ 2 data points across all artists.
+  var noteEl = document.getElementById('trendsNote');
+  if (noteEl) {
+    var maxLen = histories.reduce(function(m, rows) { return Math.max(m, rows.length); }, 0);
+    if (anyReal && maxLen < 2) {
+      noteEl.textContent = 'Tracking just started — chart fills in over time as daily snapshots run.';
+      noteEl.style.display = '';
+    } else if (!anyReal) {
+      noteEl.textContent = 'Demo mode — showing a synthetic curve. Sign in + run snapshot job for real data.';
+      noteEl.style.display = '';
+    } else {
+      noteEl.style.display = 'none';
+    }
+  }
+
+  var labels, datasets;
+
+  if (anyReal) {
+    // Union of all dates across artists, sorted ascending. This gives every
+    // line a common x-axis even if artists started being tracked on different
+    // days.
+    var dateSet = {};
+    histories.forEach(function(rows) {
+      rows.forEach(function(r) { dateSet[r.day] = true; });
+    });
+    labels = Object.keys(dateSet).sort();
+
+    // For each artist, align subs to the unioned label list. Missing days
+    // become null, which Chart.js renders as a gap (spanGaps bridges them).
+    datasets = top.map(function(a, i) {
+      // Postgres BIGINTs come back as strings; coerce to Number for Chart.js.
+      var byDay = {};
+      histories[i].forEach(function(r) { byDay[r.day] = Number(r.subs); });
+      return {
+        label: a.name.split(' ')[0],
+        data: labels.map(function(d) { return byDay[d] != null ? byDay[d] : null; }),
+        borderColor: COLORS[i],
+        backgroundColor: COLORS[i] + '22',
+        tension: 0.3,
+        fill: false,
+        pointRadius: 3,
+        spanGaps: true
+      };
+    });
+  } else {
+    // Demo / cold-start fallback. Same shape as before so the panel renders.
+    labels = ['May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr'];
+    datasets = top.map(function(a, i) {
+      var base = 20 + (a.score * 3);
+      var data = labels.map(function(_, mi) {
+        var noise = Math.floor(Math.random() * 15 - 7);
+        var drift = a.trend === 'hot' ? mi * 2.5 : a.trend === 'up' ? mi * 1.2 : 0;
+        return Math.max(5, Math.min(100, Math.round(base + noise + drift)));
+      });
+      return {
+        label: a.name.split(' ')[0],
+        data: data,
+        borderColor: COLORS[i],
+        backgroundColor: COLORS[i] + '22',
+        tension: 0.4,
+        fill: true,
+        pointRadius: 3
+      };
+    });
+  }
+
+  if (trendsChart) { trendsChart.destroy(); }
+  trendsChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels: labels, datasets: datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#888', font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: function(item) {
+              var v = item.parsed.y;
+              if (v == null) return item.dataset.label + ': —';
+              return item.dataset.label + ': ' + (anyReal ? fmtNum(v) : v);
+            }
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#666', font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 }, grid: { color: '#222' } },
+        y: {
+          ticks: {
+            color: '#666',
+            font: { size: 10 },
+            callback: function(v) { return anyReal ? fmtNum(v) : v; }
+          },
+          grid: { color: '#222' },
+          beginAtZero: !anyReal,
+          min: anyReal ? undefined : 0,
+          max: anyReal ? undefined : 100,
+          title: {
+            display: true,
+            text: anyReal ? 'Subscribers' : 'Interest (0-100)',
+            color: '#555',
+            font: { size: 10 }
+          }
+        }
+      }
+    }
+  });
+}
+
+// ── SEARCH ────────────────────────────────────────────────────────────────
+async function runSearch() {
+  var q = document.getElementById('searchInput').value.trim();
+  if (!q) { return; }
+
+  var found = artistData.filter(function(a) {
+    return a.name.toLowerCase().indexOf(q.toLowerCase()) >= 0;
+  });
+  if (found.length) {
+    setStatus('ok', 'Found: ' + found[0].name + ' already in tracker');
+    return;
+  }
+
+  setStatus('loading', 'Searching for "' + q + '"...');
+  var newA = { name: q, city: 'Custom search', ytQuery: q + ' rap music', trend: 'stable', score: 0, views: 0, subCount: 0, videos: [] };
+  artistData.push(newA);
+  await fetchArtistData(newA);
+  newA.score = Math.round((newA.views / 100000) + (newA.subCount / 1000000) * 10);
+  artistData.sort(function(a, b) { return b.score - a.score; });
+  renderGrid(); renderMetrics(); renderRankList(); renderFeed(); renderTrendsChart();
+  setStatus('ok', 'Added "' + q + '" to tracker');
+  // Drop straight into the detail view — the user typed this name, so they
+  // almost certainly want to see it, not scroll the grid looking for it.
+  location.hash = '#/artist/' + encodeURIComponent(newA.name);
+}
+
+// POST /api/admin/artists → promote a custom-search entry into the roster
+// so it shows up for every signed-in user and gets snapshotted by the nightly
+// cron. Requires admin (ADMIN_EMAILS allow-list) — for non-admins the server
+// returns 404 (we deliberately don't advertise the route).
+async function saveCustomArtistToRoster(name, btnEl) {
+  if (!name) { return; }
+  if (btnEl) { btnEl.setAttribute('disabled', 'true'); btnEl.textContent = 'Saving...'; }
+  try {
+    var r = await fetch('/api/admin/artists', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name }),
+    });
+    if (r.status === 404) {
+      throw new Error('admin only \u2014 your account is not on the ADMIN_EMAILS list');
+    }
+    if (!r.ok) {
+      var err = await r.json().catch(function() { return {}; });
+      throw new Error(err.message || ('HTTP ' + r.status));
+    }
+    // Mark this entry persisted so subsequent re-renders show the "Saved"
+    // pill instead of the button.
+    var a = artistData.find(function(x) { return x.name === name; });
+    if (a) { a.savedToRoster = true; }
+    setStatus('ok', 'Added \u201C' + name + '\u201D to the roster');
+    renderGrid();
+  } catch (e) {
+    setStatus('error', 'Could not save: ' + (e.message || e));
+    if (btnEl) { btnEl.removeAttribute('disabled'); btnEl.textContent = '+ Save'; }
+  }
+}
+
+// Grid cards call this with their array index. We route to the hash so the
+// back button + refresh-keeps-me-here behaviour both work for free.
+function focusArtist(i) {
+  var a = artistData[i];
+  if (!a) { return; }
+  location.hash = '#/artist/' + encodeURIComponent(a.name);
+}
+
+// ── COMPARE MODE STATE + HANDLERS ────────────────────────────────────────
+// compareSet holds artist names (not indices) so it survives grid re-sorts.
+// Cap at 5 — Chart.js legends + colour palette stay legible up to there.
+var compareSet = new Set();
+var COMPARE_MAX = 5;
+// Palette reused across compare datasets. Picked for contrast on the
+// dark card background; order matches roster-list priority.
+var COMPARE_COLORS = ['#e8b354', '#e05c8a', '#4ecb71', '#5ec8ff', '#c48cff', '#ff9f55'];
+
+function toggleCompare(name) {
+  if (!name) { return; }
+  if (compareSet.has(name)) {
+    compareSet.delete(name);
+  } else {
+    if (compareSet.size >= COMPARE_MAX) {
+      setStatus('error', 'Compare max is ' + COMPARE_MAX + ' artists');
+      return;
+    }
+    compareSet.add(name);
+  }
+  renderGrid();
+  renderCompareBar();
+}
+
+function clearCompareSet() {
+  compareSet.clear();
+  renderGrid();
+  renderCompareBar();
+}
+
+function renderCompareBar() {
+  var bar = document.getElementById('compareBar');
+  var cnt = document.getElementById('cbCount');
+  if (!bar || !cnt) { return; }
+  var n = compareSet.size;
+  cnt.textContent = n;
+  // Hide the bar on the detail/compare views + when fewer than 2 picked.
+  var onSubview = document.body.classList.contains('detail-active')
+               || document.body.classList.contains('compare-active');
+  if (n >= 2 && !onSubview) {
+    bar.classList.remove('hidden');
+  } else {
+    bar.classList.add('hidden');
+  }
+}
+
+function goToCompareView() {
+  if (compareSet.size < 2) { return; }
+  var names = Array.from(compareSet);
+  // Semicolon-delimited — some artist names contain commas (feat. joins).
+  location.hash = '#/compare/' + names.map(encodeURIComponent).join(';');
+}
+
+// ── ARTIST DETAIL (hash-routed drill-down) ───────────────────────────────
+// `#/artist/<name>` hides the main dashboard and shows a per-artist view.
+// All data is pulled from the same endpoints the dashboard already uses:
+//   - artistData[i]  — stats + videos populated by fetchArtistData()
+//   - /api/stats/history?artist=...&days=365 — single-line chart
+// so the backend needs zero changes for this feature.
+var detailChart = null;
+
+function routeFromHash() {
+  var h = location.hash || '';
+  var mArtist  = h.match(/^#\/artist\/(.+)$/);
+  var mCompare = h.match(/^#\/compare\/(.+)$/);
+  if (mArtist) {
+    hideCompareView();
+    showArtistDetail(decodeURIComponent(mArtist[1]));
+  } else if (mCompare) {
+    hideArtistDetail();
+    var names = mCompare[1].split(';').map(decodeURIComponent).filter(Boolean);
+    showCompareView(names);
+  } else {
+    hideArtistDetail();
+    hideCompareView();
+  }
+  renderCompareBar();
+}
+
+function showArtistDetail(name) {
+  var artist = artistData.find(function(a) { return a.name === name; });
+  if (!artist) {
+    // Artist not in current roster (bad deep link, or roster changed since
+    // the user bookmarked). Bounce back to the dashboard.
+    location.hash = '';
+    return;
+  }
+  document.body.classList.add('detail-active');
+  document.getElementById('artistDetail').classList.remove('hidden');
+  renderArtistDetail(artist);
+  window.scrollTo(0, 0);
+}
+
+function hideArtistDetail() {
+  document.body.classList.remove('detail-active');
+  var d = document.getElementById('artistDetail');
+  if (d) { d.classList.add('hidden'); }
+  if (detailChart) { detailChart.destroy(); detailChart = null; }
+}
+
+function renderArtistDetail(a) {
+  var meta = metaFor(a.name);
+  var tc = a.trend === 'hot' ? 'trend-hot' : a.trend === 'up' ? 'trend-up' : 'trend-stable';
+  var tl = a.trend === 'hot' ? 'Hot' : a.trend === 'up' ? 'Rising' : 'Stable';
+
+  document.getElementById('detailName').textContent = a.name;
+  document.getElementById('detailCity').textContent = meta.city || '';
+  var badge = document.getElementById('detailTrend');
+  badge.textContent = tl;
+  badge.className   = 'trend-badge ' + tc;
+
+  document.getElementById('detailSubs').textContent   = fmtNum(a.subCount || 0);
+  document.getElementById('detailViews').textContent  = fmtNum(a.views || 0);
+  document.getElementById('detailRecent').textContent = fmtNum(a.recentAvgViews || 0);
+  document.getElementById('detailScore').textContent  = a.score || 0;
+
+  // Score breakdown — mirrors the formula in refreshAll(), exposed here
+  // so users can see exactly how a ranking got its number.
+  var subTerm    = Math.round(Math.log10((a.subCount       || 0) + 1) * 10 * 10) / 10;
+  var viewTerm   = Math.round(Math.log10((a.views          || 0) + 1) *  5 * 10) / 10;
+  var recentTerm = Math.round(Math.log10((a.recentAvgViews || 0) + 1) *  3 * 10) / 10;
+  var trendBoost = a.trend === 'hot' ? 5 : a.trend === 'up' ? 3 : 0;
+  document.getElementById('detailBreakdown').innerHTML =
+      '<div class="bd-row"><span>Subscribers &middot; log\u2081\u2080 \u00d7 10</span><span>' + fmtNum(a.subCount || 0) + ' \u2192 +' + subTerm + '</span></div>'
+    + '<div class="bd-row"><span>Lifetime views &middot; log\u2081\u2080 \u00d7 5</span><span>' + fmtNum(a.views || 0) + ' \u2192 +' + viewTerm + '</span></div>'
+    + '<div class="bd-row"><span>Recent avg views &middot; log\u2081\u2080 \u00d7 3</span><span>' + fmtNum(a.recentAvgViews || 0) + ' \u2192 +' + recentTerm + '</span></div>'
+    + '<div class="bd-row"><span>Editorial trend (' + escHtml(a.trend || 'stable') + ')</span><span>+' + trendBoost + '</span></div>'
+    + '<div class="bd-row bd-total"><span>Total score</span><span>' + (a.score || 0) + '</span></div>';
+
+  // Recent uploads — reuse whatever fetchArtistData() cached.
+  var videos = (a.videos || []).slice(0, 10);
+  if (videos.length) {
+    document.getElementById('detailVideos').innerHTML = videos.map(function(v) {
+      var vStr = v.views > 1000000
+        ? (v.views / 1000000).toFixed(1) + 'M views'
+        : v.views > 1000
+          ? Math.round(v.views / 1000) + 'K views'
+          : 'Demo';
+      var thumb = v.thumb
+        ? '<img class="feed-thumb" src="' + v.thumb + '" alt="">'
+        : '<div class="feed-thumb">&#127925;</div>';
+      var link = (v.url && v.url !== '#') ? 'href="' + v.url + '" target="_blank" rel="noopener"' : '';
+      return '<div class="feed-item">'
+        + thumb
+        + '<div class="feed-info">'
+        + '<div class="feed-title"><a ' + link + ' style="color:var(--text);text-decoration:none">' + escHtml(v.title) + '</a></div>'
+        + '<div class="feed-meta">' + escHtml(v.channel || a.name) + '</div>'
+        + '</div><span class="feed-views">' + vStr + '</span></div>';
+    }).join('');
+  } else {
+    document.getElementById('detailVideos').innerHTML =
+      '<div style="color:var(--sub);font-size:0.85rem;padding:10px 0">No recent videos cached yet. Hit Refresh on the dashboard, then come back.</div>';
+  }
+
+  renderDetailChart(a);
+}
+
+async function renderDetailChart(a) {
+  var canvas = document.getElementById('detailChart');
+  if (!canvas) { return; }
+  var ctx = canvas.getContext('2d');
+  var noteEl = document.getElementById('detailChartNote');
+
+  var rows = [];
+  try {
+    if (backendOk && authUser) {
+      var r = await proxyGet('/api/stats/history?artist=' + encodeURIComponent(a.name) + '&days=365');
+      rows = (r && Array.isArray(r.rows)) ? r.rows : [];
+    }
+  } catch (_) {
+    rows = [];
+  }
+
+  var labels, data, realData;
+  if (rows.length) {
+    // Postgres BIGINT comes back as a string; coerce to Number for Chart.js.
+    labels   = rows.map(function(r) { return r.day; });
+    data     = rows.map(function(r) { return Number(r.subs); });
+    realData = true;
+    if (rows.length < 2) {
+      noteEl.textContent   = 'Tracking just started — chart fills in as daily snapshots run.';
+      noteEl.style.display = '';
+    } else {
+      noteEl.style.display = 'none';
+    }
+  } else {
+    // Same synthetic curve the main chart uses so demo-mode looks consistent.
+    labels = ['May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr'];
+    var base = 20 + ((a.score || 0) * 3);
+    data = labels.map(function(_, mi) {
+      var noise = Math.floor(Math.random() * 15 - 7);
+      var drift = a.trend === 'hot' ? mi * 2.5 : a.trend === 'up' ? mi * 1.2 : 0;
+      return Math.max(5, Math.min(100, Math.round(base + noise + drift)));
+    });
+    realData = false;
+    noteEl.textContent   = 'Demo mode — synthetic curve. Sign in + run the snapshot job for real history.';
+    noteEl.style.display = '';
+  }
+
+  if (detailChart) { detailChart.destroy(); }
+  detailChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: a.name.split(' ')[0],
+        data: data,
+        borderColor: '#c8a84b',
+        backgroundColor: '#c8a84b33',
+        tension: 0.3,
+        fill: true,
+        pointRadius: 3,
+        spanGaps: true
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(item) {
+              var v = item.parsed.y;
+              if (v == null) return '—';
+              return realData ? fmtNum(v) + ' subs' : v + ' interest';
+            }
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#666', font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 }, grid: { color: '#222' } },
+        y: {
+          ticks: { color: '#666', font: { size: 10 }, callback: function(v) { return realData ? fmtNum(v) : v; } },
+          grid: { color: '#222' },
+          beginAtZero: !realData,
+          title: {
+            display: true,
+            text: realData ? 'Subscribers' : 'Interest (0-100)',
+            color: '#555', font: { size: 10 }
+          }
+        }
+      }
+    }
+  });
+}
+
+// ── COMPARE VIEW ─────────────────────────────────────────────────────────
+// Hash-routed at #/compare/<name1>;<name2>;... Shows one line chart with
+// each artist overlaid. Pulls /api/stats/history per artist in parallel;
+// falls back to the synthetic curve if a given artist has no rows yet.
+var compareChart = null;
+
+function showCompareView(names) {
+  if (!names || names.length < 2) { location.hash = ''; return; }
+  // Only keep names that actually exist in the roster (drops stale entries
+  // from deep-links or a sign-out that wiped artistData).
+  var known = names.filter(function(n) {
+    return artistData.find(function(a) { return a.name === n; });
+  });
+  if (known.length < 2) { location.hash = ''; return; }
+  document.body.classList.add('compare-active');
+  document.getElementById('compareView').classList.remove('hidden');
+  document.getElementById('compareTitle').textContent =
+    'Compare: ' + known.join(' vs ');
+  renderCompareChart(known);
+  window.scrollTo(0, 0);
+}
+
+function hideCompareView() {
+  document.body.classList.remove('compare-active');
+  var v = document.getElementById('compareView');
+  if (v) { v.classList.add('hidden'); }
+  if (compareChart) { compareChart.destroy(); compareChart = null; }
+}
+
+async function renderCompareChart(names) {
+  var canvas = document.getElementById('compareChart');
+  if (!canvas) { return; }
+  var ctx = canvas.getContext('2d');
+  var noteEl = document.getElementById('compareChartNote');
+
+  // Fetch all histories in parallel. Each result is either real rows from
+  // Postgres or a synthetic curve keyed off the artist's in-memory stats.
+  var syntheticLabels = ['May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr'];
+  var anyReal = false;
+  var anySynthetic = false;
+
+  var series = await Promise.all(names.map(async function(name) {
+    var artist = artistData.find(function(a) { return a.name === name; }) || { name: name };
+    var rows = [];
+    try {
+      if (backendOk && authUser) {
+        var r = await proxyGet('/api/stats/history?artist=' + encodeURIComponent(name) + '&days=365');
+        rows = (r && Array.isArray(r.rows)) ? r.rows : [];
+      }
+    } catch (_) { rows = []; }
+    if (rows.length) {
+      anyReal = true;
+      return {
+        name: name,
+        labels: rows.map(function(r) { return r.day; }),
+        data:   rows.map(function(r) { return Number(r.subs); }),
+        real: true,
+      };
+    }
+    anySynthetic = true;
+    var base = 20 + ((artist.score || 0) * 3);
+    var data = syntheticLabels.map(function(_, mi) {
+      var noise = Math.floor(Math.random() * 15 - 7);
+      var drift = artist.trend === 'hot' ? mi * 2.5 : artist.trend === 'up' ? mi * 1.2 : 0;
+      return Math.max(5, Math.min(100, Math.round(base + noise + drift)));
+    });
+    return { name: name, labels: syntheticLabels, data: data, real: false };
+  }));
+
+  // Pick the longest labels set as the x-axis (typically the "real" one).
+  // Shorter series get padded with nulls so Chart.js aligns them.
+  var labels = series.reduce(function(best, s) {
+    return s.labels.length > best.length ? s.labels : best;
+  }, []);
+  var datasets = series.map(function(s, i) {
+    var color = COMPARE_COLORS[i % COMPARE_COLORS.length];
+    // Align to the longest x-axis: if this series is shorter, pad head+tail.
+    var data = s.data;
+    if (s.labels !== labels) {
+      // Best-effort: right-align synthetic data to the end of the real axis.
+      var pad = Array(Math.max(0, labels.length - s.data.length)).fill(null);
+      data = pad.concat(s.data);
+    }
+    return {
+      label: s.name + (s.real ? '' : ' (demo)'),
+      data: data,
+      borderColor: color,
+      backgroundColor: color + '22',
+      tension: 0.3,
+      fill: false,
+      pointRadius: 2,
+      spanGaps: true,
+    };
+  });
+
+  if (anyReal && anySynthetic) {
+    noteEl.textContent = 'Mixed: real snapshots for some artists, synthetic curves for others.';
+    noteEl.style.display = '';
+  } else if (!anyReal) {
+    noteEl.textContent = 'Demo mode — synthetic curves. Sign in + run the snapshot job for real history.';
+    noteEl.style.display = '';
+  } else {
+    noteEl.style.display = 'none';
+  }
+
+  if (compareChart) { compareChart.destroy(); }
+  compareChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels: labels, datasets: datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, labels: { color: '#bbb', font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: function(item) {
+              var v = item.parsed.y;
+              if (v == null) return item.dataset.label + ': \u2014';
+              return item.dataset.label + ': ' + (anyReal ? fmtNum(v) : v);
+            }
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#666', font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 }, grid: { color: '#222' } },
+        y: {
+          ticks: { color: '#666', font: { size: 10 }, callback: function(v) { return anyReal ? fmtNum(v) : v; } },
+          grid: { color: '#222' },
+          beginAtZero: !anyReal,
+          title: {
+            display: true,
+            text: anyReal ? 'Subscribers' : 'Interest (0-100)',
+            color: '#555', font: { size: 10 }
+          }
+        }
+      }
+    }
+  });
+}
+
+// ── UTILS ─────────────────────────────────────────────────────────────────
+function fmtNum(n) {
+  if (!n) { return '--'; }
+  if (n >= 1000000000) { return (n / 1000000000).toFixed(1) + 'B'; }
+  if (n >= 1000000)    { return (n / 1000000).toFixed(1) + 'M'; }
+  if (n >= 1000)       { return Math.round(n / 1000) + 'K'; }
+  return String(n);
+}
+
+function escHtml(s) {
+  return String(s).replace(/[&<>"']/g, function(c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+function setStatus(type, msg) {
+  var dot = document.getElementById('statusDot');
+  dot.className = 'dot' + (type === 'loading' ? ' loading' : type === 'error' ? ' error' : '');
+  document.getElementById('statusText').textContent = msg;
+}
+
+document.getElementById('searchInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') { runSearch(); }
+});
+</script>
+</body>
+</html>
