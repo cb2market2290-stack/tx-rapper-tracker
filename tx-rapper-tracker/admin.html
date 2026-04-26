@@ -91,6 +91,29 @@
       <tbody><tr><td colspan="5" class="mono">loading…</td></tr></tbody>
     </table>
 
+    <h2>Audio extraction</h2>
+    <div class="stats" id="extraction-stats" style="margin-bottom:12px;"></div>
+    <div class="toolbar">
+      <select id="filter-job-status">
+        <option value="failed" selected>failed</option>
+        <option value="">all</option>
+        <option value="pending">pending</option>
+        <option value="running">running</option>
+        <option value="done">done</option>
+        <option value="skipped">skipped</option>
+      </select>
+      <select id="filter-job-limit">
+        <option value="50">50</option>
+        <option value="100" selected>100</option>
+        <option value="200">200</option>
+      </select>
+      <button id="btn-refresh-jobs">Refresh jobs</button>
+    </div>
+    <table id="jobs-table">
+      <thead><tr><th>Artist</th><th>Video</th><th>Status</th><th>Attempts</th><th>Touched</th><th>Last error</th><th>Actions</th></tr></thead>
+      <tbody><tr><td colspan="7" class="mono">loading…</td></tr></tbody>
+    </table>
+
     <h2>Users</h2>
     <table id="users-table">
       <thead><tr><th>Email</th><th>Sessions</th><th>Created</th><th>Last login</th><th>Status</th><th>Actions</th></tr></thead>
@@ -289,9 +312,16 @@
         const pill = r.is_archived
           ? '<span class="pill pill-disabled">archived</span>'
           : '<span class="pill pill-ok">active</span>';
-        const btn = r.is_archived
+        const archiveBtn = r.is_archived
           ? `<button class="row-action btn-good" data-action="artist-unarchive" data-artist-id="${esc(r.id)}" data-name="${esc(r.name)}">Unarchive</button>`
           : `<button class="row-action btn-warn" data-action="artist-archive" data-artist-id="${esc(r.id)}" data-name="${esc(r.name)}">Archive</button>`;
+        // Re-extract is meaningful only for active artists (archived ones have
+        // their snapshot job paused; re-running the extractor would just
+        // redownload audio nobody can browse). Hide the button for them.
+        const reextractBtn = r.is_archived
+          ? ''
+          : ` <button class="row-action btn-warn" data-action="artist-reextract" data-artist-id="${esc(r.id)}" data-name="${esc(r.name)}">Re-extract</button>`;
+        const btn = archiveBtn + reextractBtn;
         return `
         <tr>
           <td>${esc(r.name)}</td>
@@ -299,6 +329,63 @@
           <td>${pill}</td>
           <td class="mono">${esc(fmtTime(r.updated_at))}</td>
           <td>${btn}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    async function loadExtractionStats() {
+      const { stats } = await api('/api/admin/extraction-status');
+      const cards = [
+        ['Pending', stats.pending],
+        ['Running', stats.running],
+        ['Done', stats.done],
+        ['Failed', stats.failed, stats.failed > 0 ? 'warn' : ''],
+        ['Failed (24h)', stats.failed_24h, stats.failed_24h > 0 ? 'warn' : ''],
+        ['Skipped', stats.skipped],
+        ['Features rows', stats.features_total],
+      ];
+      $('extraction-stats').innerHTML = cards
+        .map(([l, v, cls = '']) => `<div class="stat"><div class="stat-label">${esc(l)}</div><div class="stat-value ${cls}">${esc(v)}</div></div>`)
+        .join('');
+    }
+
+    async function loadExtractionJobs() {
+      const params = new URLSearchParams();
+      const status = $('filter-job-status').value;
+      const lim = $('filter-job-limit').value;
+      if (status) params.set('status', status);
+      if (lim) params.set('limit', lim);
+      const { rows } = await api('/api/admin/extraction-jobs?' + params.toString());
+      const tb = $('jobs-table').querySelector('tbody');
+      if (!rows.length) {
+        const label = status ? `no jobs with status "${esc(status)}"` : 'no extraction jobs yet';
+        tb.innerHTML = `<tr><td colspan="7" class="mono">${label}</td></tr>`;
+        return;
+      }
+      const statusClass = (s) => (
+        s === 'done' ? 'pill-ok' :
+        s === 'failed' ? 'pill-disabled' :
+        s === 'running' ? 'pill-warn' :
+        ''
+      );
+      tb.innerHTML = rows.map((r) => {
+        const touched = r.finished_at ?? r.claimed_at ?? r.enqueued_at;
+        const ytLink = `https://youtu.be/${encodeURIComponent(r.video_id)}`;
+        // Retry is only meaningful for terminal states. Showing it for
+        // pending/running invites double-claims; hide it.
+        const canRetry = r.status === 'failed' || r.status === 'skipped' || r.status === 'done';
+        const retryBtn = canRetry
+          ? `<button class="row-action btn-warn" data-action="job-retry" data-job-id="${esc(r.id)}" data-video="${esc(r.video_id)}">Retry</button>`
+          : '';
+        return `
+        <tr>
+          <td>${esc(r.artist_name ?? '—')}</td>
+          <td class="mono"><a href="${esc(ytLink)}" target="_blank" rel="noopener">${esc(r.video_id)}</a><br>${esc((r.title ?? '').slice(0, 80))}</td>
+          <td><span class="pill ${statusClass(r.status)}">${esc(r.status)}</span></td>
+          <td class="mono">${esc(r.attempts)}</td>
+          <td class="mono">${esc(fmtTime(touched))}</td>
+          <td class="mono">${esc((r.last_error ?? '').slice(0, 140))}</td>
+          <td>${retryBtn}</td>
         </tr>`;
       }).join('');
     }
@@ -345,7 +432,11 @@
 
       try {
         app.classList.remove('hidden');
-        await Promise.all([loadStats(), loadSnapshot(), loadArtists(), loadUsers(), loadSessions(), loadAudit()]);
+        await Promise.all([
+          loadStats(), loadSnapshot(), loadArtists(),
+          loadUsers(), loadSessions(), loadAudit(),
+          loadExtractionStats(), loadExtractionJobs(),
+        ]);
       } catch (err) {
         if (err.status === 404) {
           banner.className = 'banner error';
@@ -363,6 +454,12 @@
       $('artist-name').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); addArtistFromForm(); }
       });
+      $('btn-refresh-jobs').addEventListener('click', () =>
+        Promise.all([loadExtractionStats(), loadExtractionJobs()]).catch(console.error));
+      $('filter-job-status').addEventListener('change', () =>
+        loadExtractionJobs().catch(console.error));
+      $('filter-job-limit').addEventListener('change', () =>
+        loadExtractionJobs().catch(console.error));
     }
 
     // Delegated click handler for per-row action buttons. We delegate rather
@@ -402,6 +499,16 @@
         confirmed = confirm(`Unarchive ${name}?\n\nThey'll return to the roster and the snapshot job will resume pulling their stats.`);
         endpoint = `/api/admin/artists/${btn.dataset.artistId}/unarchive`;
         refresh = () => Promise.all([loadArtists(), loadAudit()]);
+      } else if (action === 'job-retry') {
+        const v = btn.dataset.video || '(unknown)';
+        confirmed = confirm(`Retry extraction for ${v}?\n\nThe worker will pick this up on its next pass — usually within a minute. attempts is reset to 0.`);
+        endpoint = `/api/admin/extraction-jobs/${btn.dataset.jobId}/retry`;
+        refresh = () => Promise.all([loadExtractionStats(), loadExtractionJobs(), loadAudit()]);
+      } else if (action === 'artist-reextract') {
+        const name = btn.dataset.name || '(unknown)';
+        confirmed = confirm(`Re-extract ALL audio features for ${name}?\n\nEvery analyzed track will be re-enqueued. The old features stay readable until the worker upserts new ones — no downtime, but the worker will do real CPU work for several minutes.`);
+        endpoint = `/api/admin/artists/${btn.dataset.artistId}/reextract`;
+        refresh = () => Promise.all([loadExtractionStats(), loadExtractionJobs(), loadAudit()]);
       } else {
         return;
       }
@@ -410,7 +517,10 @@
 
       btn.disabled = true;
       try {
-        await post(endpoint);
+        const result = await post(endpoint);
+        if (action === 'artist-reextract') {
+          alert(`Re-extraction queued: ${result.requeued ?? 0} jobs flipped back to pending.`);
+        }
         await refresh();
         // On success the table is re-rendered and this button is replaced, so
         // no need to re-enable it here.

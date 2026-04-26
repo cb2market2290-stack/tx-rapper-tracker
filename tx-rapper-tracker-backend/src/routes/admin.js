@@ -21,6 +21,7 @@ import { z } from 'zod';
 import { query } from '../db/pool.js';
 import { requireAdmin } from '../middleware/authenticate.js';
 import { HttpError } from '../middleware/errorHandler.js';
+import { requeueForReextraction } from '../services/features.js';
 
 const router = Router();
 
@@ -422,6 +423,224 @@ router.post('/artists/:id/unarchive', async (req, res, next) => {
       details: { artistId: id, name: u.rows[0].name },
     });
     res.json({ kind: 'admin.artists.unarchive', ok: true, artistId: id });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---- Audio extraction jobs (Phase 2e.B) ----------------------------------
+// The Python worker (scripts/extract-features.py) drains
+// track_extraction_jobs row by row. Things go wrong: yt-dlp can fail on a
+// removed/age-restricted video, ffmpeg can choke, librosa can OOM on a
+// 90-minute mix the worker shouldn't have downloaded in the first place.
+// When that happens the row goes status='failed' with last_error set, and
+// the worker moves on. The admin UI surfaces those failures + lets ops
+// retry one job, retry-all-failed for an artist, or wipe an artist's
+// extracted features and re-enqueue from scratch.
+//
+// Status values come from migration 009's CHECK constraint:
+//   pending | running | done | failed | skipped
+//
+// Why these are admin-only: rebuilding features is expensive (yt-dlp
+// downloads + librosa CPU). Letting any signed-in user trigger it would be
+// a free DoS vector. Same posture as the daily snapshot job.
+
+export const ExtractionJobsQuery = z.object({
+  artistId: z.string().uuid().optional(),
+  status: z.enum(['pending', 'running', 'done', 'failed', 'skipped']).optional(),
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
+/**
+ * GET /api/admin/extraction-jobs?artistId=&status=&limit=
+ * List recent extraction jobs with the artist name joined in. Sorts most-
+ * recently-touched first so failures from the latest worker pass surface
+ * at the top.
+ */
+router.get('/extraction-jobs', async (req, res, next) => {
+  try {
+    const q = parseQ(ExtractionJobsQuery, req.query ?? {});
+    const where = [];
+    const params = [];
+    if (q.artistId) {
+      params.push(q.artistId);
+      where.push(`j.artist_id = $${params.length}`);
+    }
+    if (q.status) {
+      params.push(q.status);
+      where.push(`j.status = $${params.length}`);
+    }
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    params.push(q.limit, q.offset);
+    const limitIdx = params.length - 1;
+    const offsetIdx = params.length;
+    const { rows } = await query(
+      `SELECT j.id, j.artist_id, a.name AS artist_name, j.video_id, j.title,
+              j.duration_sec, j.status, j.attempts, j.last_error,
+              j.enqueued_at, j.claimed_at, j.finished_at
+         FROM track_extraction_jobs j
+         LEFT JOIN artists a ON a.id = j.artist_id
+         ${whereSql}
+        ORDER BY COALESCE(j.finished_at, j.claimed_at, j.enqueued_at) DESC
+        LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+      params
+    );
+    res.json({
+      kind: 'admin.extraction_jobs',
+      rows,
+      limit: q.limit,
+      offset: q.offset,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/admin/extraction-status — small counts widget for the admin
+ * dashboard. Lets the operator see at a glance "how many jobs are stuck
+ * pending / how many have failed in the last 24h" without paging through
+ * the table. Single GROUP BY query, plus a 24h failure count.
+ */
+router.get('/extraction-status', async (_req, res, next) => {
+  try {
+    const { rows } = await query(
+      `SELECT
+         (SELECT count(*) FROM track_extraction_jobs WHERE status = 'pending')::int  AS pending,
+         (SELECT count(*) FROM track_extraction_jobs WHERE status = 'running')::int  AS running,
+         (SELECT count(*) FROM track_extraction_jobs WHERE status = 'done')::int     AS done,
+         (SELECT count(*) FROM track_extraction_jobs WHERE status = 'failed')::int   AS failed,
+         (SELECT count(*) FROM track_extraction_jobs WHERE status = 'skipped')::int  AS skipped,
+         (SELECT count(*) FROM track_extraction_jobs
+            WHERE status = 'failed' AND finished_at > now() - interval '24 hours')::int AS failed_24h,
+         (SELECT count(*) FROM track_features)::int                                  AS features_total`
+    );
+    res.json({ kind: 'admin.extraction_status', stats: rows[0] });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/admin/extraction-jobs/:id/retry — flip ONE job (any status) back
+ * to pending. Resets attempts so the worker doesn't immediately give up
+ * (the worker bails after attempts >= 5). enqueued_at is bumped to now()
+ * so the FIFO claim queue picks this up after newer rows.
+ *
+ * 409 if the job doesn't exist; 200 with the updated row otherwise.
+ */
+const NumericIdParam = z.coerce.number().int().min(1);
+function parseNumericId(raw, label) {
+  const r = NumericIdParam.safeParse(raw);
+  if (!r.success) throw new HttpError(400, 'bad_request', `${label} is not a positive integer`);
+  return r.data;
+}
+
+router.post('/extraction-jobs/:id/retry', async (req, res, next) => {
+  try {
+    const id = parseNumericId(req.params.id, 'job id');
+    const { rows } = await query(
+      `UPDATE track_extraction_jobs
+          SET status = 'pending',
+              attempts = 0,
+              last_error = NULL,
+              claimed_at = NULL,
+              finished_at = NULL,
+              enqueued_at = now()
+        WHERE id = $1
+        RETURNING id, artist_id, video_id, status`,
+      [id]
+    );
+    if (rows.length === 0) {
+      throw new HttpError(404, 'not_found', 'extraction job not found');
+    }
+    await audit({
+      req,
+      userId: req.user.id,
+      event: 'admin_retry_extraction',
+      details: {
+        jobId: rows[0].id,
+        artistId: rows[0].artist_id,
+        videoId: rows[0].video_id,
+      },
+    });
+    res.json({ kind: 'admin.extraction_jobs.retry', ok: true, job: rows[0] });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/admin/artists/:id/reextract — re-enqueue every track this
+ * artist has a track_features row for. Used after the analyzer's algorithm
+ * changes ("librosa upgrade") or when an operator wants to wipe the slate
+ * and let the worker rebuild from scratch.
+ *
+ * Body: { dropFeatures?: boolean } — when true, also DELETEs the artist's
+ * track_features rows. Default false so the OLD numbers are still readable
+ * during the re-extraction window (worker upserts will replace them).
+ *
+ * Walks the features table → builds {artist_id, video_id} pairs → calls
+ * requeueForReextraction(). If the artist has no features yet there's
+ * nothing to do; we report 0 requeued (not an error).
+ */
+const ReextractBody = z.object({
+  dropFeatures: z.boolean().optional(),
+});
+
+router.post('/artists/:id/reextract', async (req, res, next) => {
+  try {
+    const id = parseUuid(req.params.id, 'artist id');
+    const body = ReextractBody.safeParse(req.body ?? {});
+    if (!body.success) {
+      throw new HttpError(400, 'bad_request', body.error.issues.map(
+        (i) => `${i.path.join('.')}: ${i.message}`).join('; '));
+    }
+
+    // Confirm the artist exists so we don't return ok:true for a typo'd UUID.
+    const artist = await query(
+      `SELECT id, name, is_archived FROM artists WHERE id = $1`,
+      [id]
+    );
+    if (artist.rows.length === 0) {
+      throw new HttpError(404, 'not_found', 'artist not found');
+    }
+
+    const feats = await query(
+      `SELECT artist_id, video_id, title, duration_sec
+         FROM track_features WHERE artist_id = $1`,
+      [id]
+    );
+    const requeued = await requeueForReextraction(feats.rows);
+
+    let dropped = 0;
+    if (body.data.dropFeatures) {
+      const del = await query(
+        `DELETE FROM track_features WHERE artist_id = $1`,
+        [id]
+      );
+      dropped = del.rowCount ?? 0;
+    }
+
+    await audit({
+      req,
+      userId: req.user.id,
+      event: 'admin_reextract_artist',
+      details: {
+        artistId: id,
+        artistName: artist.rows[0].name,
+        requeued: requeued.requeued,
+        droppedFeatures: dropped,
+      },
+    });
+    res.json({
+      kind: 'admin.artists.reextract',
+      ok: true,
+      artistId: id,
+      requeued: requeued.requeued,
+      droppedFeatures: dropped,
+    });
   } catch (err) {
     next(err);
   }

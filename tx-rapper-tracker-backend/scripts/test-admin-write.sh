@@ -234,6 +234,99 @@ print(n)
   if [ "$N" -ge 1 ] 2>/dev/null; then ok "audit $EV present ($N)"; else bad "audit $EV missing"; fi
 done
 
+# ============================================================================
+# Phase 2e.B — extraction-jobs admin endpoints
+# ============================================================================
+# Coverage: hidden-from-non-admin, list+filter, retry-not-found, bad body on
+# reextract, and the happy path for /artists/:id/reextract using the temp
+# artist created back in section 14. The smoke can run with no actual
+# extraction jobs in the table (the worker may not have done anything yet)
+# — so we don't depend on rows being present, just on the contract.
+
+hr "17. extraction endpoints hidden from non-admin"
+CODE=$(curl -sS -o /dev/null -w '%{http_code}' -b /tmp/jar-th.txt "$BASE/api/admin/extraction-jobs")
+code_eq 404 "$CODE" "throwaway extraction-jobs -> 404"
+CODE=$(curl -sS -o /dev/null -w '%{http_code}' -b /tmp/jar-th.txt "$BASE/api/admin/extraction-status")
+code_eq 404 "$CODE" "throwaway extraction-status -> 404"
+
+hr "18. admin lists extraction jobs"
+CODE=$(curl -sS -o /tmp/r.json -w '%{http_code}' -b /tmp/jar-admin.txt "$BASE/api/admin/extraction-jobs?limit=10")
+code_eq 200 "$CODE" "extraction-jobs reachable"
+KIND=$(python3 -c "import json;print(json.load(open('/tmp/r.json'))['kind'])" 2>/dev/null)
+[ "$KIND" = "admin.extraction_jobs" ] && ok "kind == admin.extraction_jobs" || bad "kind was '$KIND'"
+
+hr "19. status enum is enforced"
+CODE=$(curl -sS -o /dev/null -w '%{http_code}' -b /tmp/jar-admin.txt \
+  "$BASE/api/admin/extraction-jobs?status=bogus")
+code_eq 400 "$CODE" "unknown status -> 400"
+# Filtering by a real status should 200 even if zero rows match.
+CODE=$(curl -sS -o /tmp/r.json -w '%{http_code}' -b /tmp/jar-admin.txt \
+  "$BASE/api/admin/extraction-jobs?status=failed&limit=5")
+code_eq 200 "$CODE" "status=failed reachable"
+
+hr "20. extraction-status surface"
+CODE=$(curl -sS -o /tmp/r.json -w '%{http_code}' -b /tmp/jar-admin.txt "$BASE/api/admin/extraction-status")
+code_eq 200 "$CODE" "extraction-status reachable"
+for f in pending running done failed skipped failed_24h features_total; do
+  V=$(python3 -c "import json;print(json.load(open('/tmp/r.json'))['stats'].get('$f'))" 2>/dev/null)
+  if [ -n "$V" ] && [ "$V" != "None" ]; then ok "stats.$f present (= $V)"; else bad "stats.$f missing"; fi
+done
+
+hr "21. retry of a non-existent job -> 404"
+CODE=$(curl -sS -o /dev/null -w '%{http_code}' -b /tmp/jar-admin.txt \
+  -X POST "$BASE/api/admin/extraction-jobs/999999999/retry")
+code_eq 404 "$CODE" "retry missing job -> 404"
+
+# /retry expects a positive integer in the URL, not a uuid.
+CODE=$(curl -sS -o /dev/null -w '%{http_code}' -b /tmp/jar-admin.txt \
+  -X POST "$BASE/api/admin/extraction-jobs/not-a-number/retry")
+code_eq 400 "$CODE" "retry non-numeric id -> 400"
+
+hr "22. /artists/:id/reextract — happy path on the temp artist"
+# We re-create + re-archive the same throwaway artist from section 14 if
+# it's gone (test-admin-write.sh archives it but doesn't unarchive at the
+# end). For safety, ask /admin/artists for the row first. If it's archived
+# we unarchive briefly so reextract is allowed.
+curl -sS -o /tmp/r.json -b /tmp/jar-admin.txt "$BASE/api/admin/artists" >/dev/null
+TH_ART_ROW=$(python3 -c "
+import json
+rows=json.load(open('/tmp/r.json'))['rows']
+for r in rows:
+  if r['name']=='${TH_ARTIST:-__none__}':
+    print(r['id'], '1' if r['is_archived'] else '0'); break
+" 2>/dev/null)
+TH_ART_REID=$(echo "$TH_ART_ROW" | awk '{print $1}')
+TH_ART_ARCH=$(echo "$TH_ART_ROW" | awk '{print $2}')
+if [ -z "$TH_ART_REID" ]; then
+  ok "throwaway artist already cleaned up — skipping reextract happy path"
+else
+  if [ "$TH_ART_ARCH" = "1" ]; then
+    curl -sS -o /dev/null -X POST -b /tmp/jar-admin.txt \
+      "$BASE/api/admin/artists/$TH_ART_REID/unarchive" >/dev/null
+  fi
+  CODE=$(curl -sS -o /tmp/r.json -w '%{http_code}' -b /tmp/jar-admin.txt \
+    -X POST -H 'Content-Type: application/json' -d '{}' \
+    "$BASE/api/admin/artists/$TH_ART_REID/reextract")
+  code_eq 200 "$CODE" "reextract reachable"
+  KIND=$(python3 -c "import json;print(json.load(open('/tmp/r.json'))['kind'])" 2>/dev/null)
+  [ "$KIND" = "admin.artists.reextract" ] && ok "kind == admin.artists.reextract" || bad "kind was '$KIND'"
+  # Re-archive to leave the DB how we found it.
+  curl -sS -o /dev/null -X POST -b /tmp/jar-admin.txt \
+    "$BASE/api/admin/artists/$TH_ART_REID/archive" >/dev/null
+fi
+
+hr "23. reextract on a fake uuid -> 404"
+CODE=$(curl -sS -o /dev/null -w '%{http_code}' -b /tmp/jar-admin.txt \
+  -X POST -H 'Content-Type: application/json' -d '{}' \
+  "$BASE/api/admin/artists/00000000-0000-4000-8000-000000000000/reextract")
+code_eq 404 "$CODE" "reextract bogus uuid -> 404"
+
+hr "24. reextract with bad body -> 400"
+CODE=$(curl -sS -o /dev/null -w '%{http_code}' -b /tmp/jar-admin.txt \
+  -X POST -H 'Content-Type: application/json' -d '{"dropFeatures":"yes"}' \
+  "$BASE/api/admin/artists/00000000-0000-4000-8000-000000000000/reextract")
+code_eq 400 "$CODE" "non-boolean dropFeatures -> 400"
+
 hr "summary"
 echo "passed: $PASS"
 echo "failed: $FAIL"

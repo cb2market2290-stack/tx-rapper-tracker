@@ -29,7 +29,7 @@ process.env.SESSION_SECRET =
 process.env.DATABASE_URL =
   process.env.DATABASE_URL || 'postgres://localhost/tx_rapper_tracker_dev';
 
-const { ListQuery, SnapshotStatusQuery, UuidParam, NewArtist } =
+const { ListQuery, SnapshotStatusQuery, UuidParam, NewArtist, ExtractionJobsQuery } =
   await import('../src/routes/admin.js');
 
 // ---- ListQuery -----------------------------------------------------------
@@ -187,5 +187,58 @@ test('SnapshotStatusQuery caps limit at 50 (tighter than ListQuery\'s 500)', () 
 
 test('SnapshotStatusQuery rejects limit below 1', () => {
   const r = SnapshotStatusQuery.safeParse({ limit: '0' });
+  assert.equal(r.success, false);
+});
+
+// ---- ExtractionJobsQuery (Phase 2e.B) -----------------------------------
+// Same coercion + bounds posture as ListQuery (Express gives us strings),
+// plus a status enum locked to migration 009's CHECK constraint and an
+// optional artistId UUID. The point of these tests is to lock down the
+// contract — if a future refactor drops "skipped" from the enum we want a
+// red test, not a runtime 500 the next time the worker writes that status.
+
+test('ExtractionJobsQuery defaults limit=100, offset=0 when omitted', () => {
+  const r = ExtractionJobsQuery.safeParse({});
+  assert.equal(r.success, true);
+  assert.equal(r.data.limit, 100);
+  assert.equal(r.data.offset, 0);
+  assert.equal(r.data.artistId, undefined);
+  assert.equal(r.data.status, undefined);
+});
+
+test('ExtractionJobsQuery coerces limit + offset from strings', () => {
+  const r = ExtractionJobsQuery.safeParse({ limit: '50', offset: '20' });
+  assert.equal(r.success, true);
+  assert.equal(r.data.limit, 50);
+  assert.equal(r.data.offset, 20);
+});
+
+test('ExtractionJobsQuery accepts every valid status', () => {
+  for (const status of ['pending', 'running', 'done', 'failed', 'skipped']) {
+    const r = ExtractionJobsQuery.safeParse({ status });
+    assert.equal(r.success, true, `status='${status}' should parse`);
+    assert.equal(r.data.status, status);
+  }
+});
+
+test('ExtractionJobsQuery rejects unknown status', () => {
+  const r = ExtractionJobsQuery.safeParse({ status: 'queued' });
+  assert.equal(r.success, false);
+});
+
+test('ExtractionJobsQuery rejects non-uuid artistId', () => {
+  const r = ExtractionJobsQuery.safeParse({ artistId: 'not-a-uuid' });
+  assert.equal(r.success, false);
+});
+
+test('ExtractionJobsQuery accepts a real uuid', () => {
+  const r = ExtractionJobsQuery.safeParse({
+    artistId: '00000000-0000-4000-8000-000000000000',
+  });
+  assert.equal(r.success, true);
+});
+
+test('ExtractionJobsQuery caps limit at 500', () => {
+  const r = ExtractionJobsQuery.safeParse({ limit: '501' });
   assert.equal(r.success, false);
 });
