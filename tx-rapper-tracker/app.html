@@ -40,6 +40,41 @@
   .freshness-badge.stale { border-color: #c7971f;       color: #d4a82d; }
   .freshness-badge.dead  { border-color: #c84040;       color: #e06060; }
 
+  /* Plan tier pill — sits next to the freshness badge in the header. The
+     "Free" variant doubles as an Upgrade CTA (clickable). The "Paid"
+     variant is informational + opens the Stripe Customer Portal so a
+     user can manage their subscription without leaving the dashboard. */
+  .plan-pill {
+    font-size: 0.7rem; padding: 3px 9px; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--sub); white-space: nowrap;
+    background: transparent; cursor: pointer; font-family: inherit;
+  }
+  .plan-pill.paid {
+    border-color: var(--accent); color: var(--accent);
+  }
+  .plan-pill.free {
+    border-color: var(--accent2); color: var(--accent2);
+  }
+  .plan-pill:hover { opacity: 0.85; }
+  .plan-pill[disabled] { cursor: default; opacity: 0.6; }
+
+  /* Inline "Upgrade to unlock" card rendered into the audio-features
+     panel when /api/artists/:id/features returns 402. Same vertical
+     footprint as the "no tracks analyzed yet" empty-state so the layout
+     doesn't jump when the gate flips. */
+  .feat-gate {
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px; background: rgba(224,92,138,0.06);
+  }
+  .feat-gate .fg-title {
+    font-size: 0.85rem; font-weight: 700; color: var(--text); margin-bottom: 4px;
+  }
+  .feat-gate .fg-body {
+    font-size: 0.78rem; color: var(--sub); margin-bottom: 10px; line-height: 1.4;
+  }
+  .feat-gate .fg-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .feat-gate .fg-actions .btn { padding: 7px 14px; font-size: 0.78rem; }
+
   .container { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
 
   .search-row { display: flex; gap: 10px; margin-bottom: 24px; }
@@ -268,6 +303,56 @@
   }
   .auth-modal .ok.hidden { display: none; }
 
+  /* Security panel (2FA enroll/disable). Wider than the login modal so the
+     QR code + recovery-code grid don't get squashed. */
+  .auth-modal.sec-modal { max-width: 460px; }
+  .auth-modal.sec-modal p {
+    font-size: 0.82rem; color: var(--text); margin: 6px 0 12px; line-height: 1.45;
+  }
+  .auth-modal .sec-qr-wrap {
+    display: flex; justify-content: center; padding: 8px 0 12px;
+  }
+  .auth-modal .sec-qr-wrap img {
+    max-width: 200px; border-radius: 8px; background: #fff; padding: 6px;
+  }
+  .auth-modal .sec-secret {
+    display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.78rem; letter-spacing: 1.5px; word-break: break-all;
+    background: #0d0d0d; border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; margin: 4px 0 14px; color: var(--text);
+  }
+  .auth-modal .sec-codes {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.82rem; line-height: 1.7;
+    background: #0d0d0d; border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; margin: 6px 0 12px; color: var(--text);
+    max-height: 220px; overflow: auto; white-space: pre;
+  }
+  .auth-modal a[data-action="security-regenerate"] {
+    color: var(--accent); cursor: pointer; font-size: 0.75rem;
+  }
+
+  /* Registered security-key list inside the security overlay. Each row is
+     name + meta + Remove button on a single line. Wraps when narrow. */
+  .auth-modal ul.sec-keys {
+    list-style: none; padding: 0; margin: 6px 0 12px;
+    border: 1px solid var(--border); border-radius: 8px; background: #0d0d0d;
+  }
+  .auth-modal ul.sec-keys li {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 8px 12px; border-bottom: 1px solid var(--border);
+    font-size: 0.82rem;
+  }
+  .auth-modal ul.sec-keys li:last-child { border-bottom: none; }
+  .auth-modal ul.sec-keys li.sec-keys-empty {
+    color: var(--sub); justify-content: center;
+  }
+  .auth-modal ul.sec-keys .sec-keys-name { color: var(--text); }
+  .auth-modal ul.sec-keys .sec-keys-meta { color: var(--sub); flex: 1; }
+  .auth-modal .btn.sec.sm {
+    padding: 4px 10px; font-size: 0.72rem;
+  }
+
   /* Flash banner shown after a successful reset redirect back to /. */
   .flash-banner {
     background: var(--card); border: 1px solid var(--up); border-radius: 12px;
@@ -458,6 +543,50 @@
   .bd-total { margin-top: 4px; }
   .bd-total span:first-child { color: var(--accent); font-weight: 600; }
   .bd-total span:last-child  { color: var(--accent); font-size: 1rem; }
+
+  /* Audio features panel — Phase 2c. Renders librosa-derived per-track
+     analysis (tempo / key / energy) plus an artist-level summary. The
+     summary row drives the small feature bonus that mixes into the
+     ranking score; the per-track table is a "hover for detail" affordance. */
+  .feat-empty { color: var(--sub); font-size: 0.85rem; padding: 4px 0; }
+  .feat-summary {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 10px; margin-bottom: 14px;
+  }
+  .feat-stat {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 10px;
+  }
+  .feat-stat .fs-lab {
+    font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--sub); margin-bottom: 4px;
+  }
+  .feat-stat .fs-val { font-size: 1rem; font-weight: 700; color: var(--text); }
+  .feat-stat .fs-sub { font-size: 0.7rem; color: var(--sub); margin-top: 2px; }
+  .feat-key-pill {
+    display: inline-block; padding: 1px 6px; margin-left: 6px;
+    background: var(--accent); color: #000; font-size: 0.65rem;
+    border-radius: 999px; font-weight: 700;
+  }
+  .feat-energy-meter {
+    height: 6px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 999px; overflow: hidden; margin-top: 6px;
+  }
+  .feat-energy-meter > span {
+    display: block; height: 100%; background: var(--accent); transition: width .25s;
+  }
+  .feat-tracks {
+    width: 100%; border-collapse: collapse; font-size: 0.78rem;
+  }
+  .feat-tracks th, .feat-tracks td {
+    text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border);
+  }
+  .feat-tracks th {
+    color: var(--sub); font-weight: 600; font-size: 0.68rem;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .feat-tracks td.feat-num { text-align: right; color: var(--text); white-space: nowrap; }
+  .feat-tracks tr:last-child td { border-bottom: none; }
 </style>
 </head>
 <body>
@@ -466,9 +595,14 @@
   <h1>TX Female Rapper <span>Tracker</span></h1>
   <div class="auth-widget" id="authWidget">
     <span class="who" id="authWho">&nbsp;</span>
+    <button class="btn link hidden" id="btnSecurity" data-action="security-open">Security</button>
     <button class="btn link hidden" id="btnSignOut" data-action="signout">Sign out</button>
     <button class="btn sec hidden" id="btnSignIn" data-action="signin">Sign in</button>
     <button class="btn hidden" id="btnSignUp" data-action="signup">Create account</button>
+    <!-- Plan tier pill (Phase 2d). Hidden until /api/payments/plan resolves.
+         "Free" is clickable → POST /api/payments/checkout → Stripe.
+         "Paid" is clickable → POST /api/payments/portal → Customer Portal. -->
+    <button class="plan-pill hidden" id="planPill" data-action="plan-pill" title=""></button>
     <span class="freshness-badge hidden" id="freshness" title=""></span>
     <span class="last-update" id="lastUpdate">Loading data...</span>
   </div>
@@ -482,12 +616,28 @@
     <div class="err hidden" id="authErr"></div>
     <div class="ok hidden" id="authOk"></div>
     <form id="authForm" onsubmit="return submitAuth(event)" autocomplete="off">
-      <label>Email</label>
-      <input type="email" id="authEmail" required autocomplete="email" />
+      <div id="authEmailWrap">
+        <label>Email</label>
+        <input type="email" id="authEmail" required autocomplete="email" />
+      </div>
       <div id="authPassWrap">
         <label>Password</label>
         <input type="password" id="authPass" minlength="1" autocomplete="current-password" />
         <a class="forgot-link" id="forgotLink" data-action="auth-switch" data-arg="forgot">Forgot your password?</a>
+      </div>
+      <!-- Second-factor step. Visible only when authMode === '2fa'. -->
+      <div id="auth2faWrap" class="hidden">
+        <div id="auth2faTotpRow">
+          <label id="auth2faLabel">6-digit code</label>
+          <input type="text" id="auth2faCode" inputmode="numeric" autocomplete="one-time-code"
+                 maxlength="32" placeholder="123456" />
+          <a class="forgot-link" id="auth2faToggle" data-action="auth-2fa-toggle">Use a recovery code instead</a>
+        </div>
+        <div id="auth2faWebauthnRow" class="hidden" style="margin-top:10px">
+          <button type="button" class="btn sec" id="authWebauthnBtn" data-action="webauthn-authenticate">
+            Use a security key
+          </button>
+        </div>
       </div>
       <div class="row">
         <button type="submit" class="btn" id="authSubmit">Sign in</button>
@@ -495,6 +645,89 @@
       </div>
     </form>
     <div class="toggle" id="authToggle">No account? <a data-action="auth-switch" data-arg="signup">Create one</a></div>
+  </div>
+</div>
+
+<!-- Security panel: 2FA enrollment / disable. One overlay, switched between
+     several views (loading / off / enrolling / codes / on / disabling). -->
+<div class="auth-overlay hidden" id="securityOverlay" data-action="security-overlay-bg">
+  <div class="auth-modal sec-modal">
+    <h2 id="secTitle">Security</h2>
+    <div class="hint" id="secHint">Loading…</div>
+    <div class="err hidden" id="secErr"></div>
+    <div class="ok hidden" id="secOk"></div>
+
+    <!-- View: 2FA OFF -->
+    <div class="hidden" id="secViewOff">
+      <p>Two-factor authentication is currently <b>off</b>. Adding it means a stolen password alone won't be enough to sign in.</p>
+      <div class="row">
+        <button type="button" class="btn" data-action="security-enroll-start">Enable 2FA (authenticator app)</button>
+      </div>
+      <p style="margin-top:14px">Or use a passkey / security key — Touch ID, Windows Hello, YubiKey, etc:</p>
+      <div class="row">
+        <button type="button" class="btn sec" data-action="webauthn-register">Add a security key</button>
+        <button type="button" class="btn sec" data-action="security-close">Close</button>
+      </div>
+    </div>
+
+    <!-- View: 2FA enrollment in progress -->
+    <div class="hidden" id="secViewEnroll">
+      <p>Scan this QR code with your authenticator app (Google Authenticator, 1Password, Authy, etc.):</p>
+      <div class="sec-qr-wrap">
+        <img id="secQr" alt="2FA QR code" />
+      </div>
+      <p>Or enter this secret manually:</p>
+      <code class="sec-secret" id="secSecret"></code>
+      <form id="secEnrollForm" onsubmit="return submitEnrollVerify(event)" autocomplete="off">
+        <label>Enter the 6-digit code from your app:</label>
+        <input type="text" id="secEnrollCode" inputmode="numeric" autocomplete="one-time-code"
+               maxlength="8" placeholder="123456" required />
+        <div class="row">
+          <button type="submit" class="btn" id="secEnrollSubmit">Verify &amp; turn on 2FA</button>
+          <button type="button" class="btn sec" data-action="security-close">Cancel</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- View: recovery codes (shown ONCE after successful enrollment) -->
+    <div class="hidden" id="secViewCodes">
+      <p><b>Save these recovery codes now.</b> Each works once if you ever lose your authenticator. We won't show them again — store them in a password manager or print them out.</p>
+      <pre class="sec-codes" id="secCodes"></pre>
+      <div class="row">
+        <button type="button" class="btn sec" data-action="security-copy-codes">Copy</button>
+        <button type="button" class="btn sec" data-action="security-download-codes">Download</button>
+        <button type="button" class="btn" data-action="security-codes-ack">I've saved them</button>
+      </div>
+    </div>
+
+    <!-- View: 2FA ON, with disable form -->
+    <div class="hidden" id="secViewOn">
+      <p id="secTotpStatus">Authenticator-app 2FA is currently <b>on</b><span id="secOnDetails"></span>.</p>
+      <p id="secRecoveryRow">Recovery codes remaining: <b id="secCodesLeft">—</b>. <a data-action="security-regenerate">Regenerate</a></p>
+
+      <details id="secTotpDisableWrap">
+        <summary>Disable authenticator-app 2FA</summary>
+        <form id="secDisableForm" onsubmit="return submitDisable2fa(event)" autocomplete="off">
+          <label>Current password</label>
+          <input type="password" id="secDisablePass" autocomplete="current-password" required />
+          <label>6-digit code</label>
+          <input type="text" id="secDisableCode" inputmode="numeric" autocomplete="one-time-code"
+                 maxlength="8" placeholder="123456" required />
+          <div class="row">
+            <button type="submit" class="btn" id="secDisableSubmit">Disable</button>
+          </div>
+        </form>
+      </details>
+
+      <hr style="border:none;border-top:1px solid #2a2a2a;margin:14px 0" />
+
+      <p>Security keys / passkeys: <span id="secWebauthnSummary">—</span></p>
+      <ul class="sec-keys" id="secWebauthnList"></ul>
+      <div class="row">
+        <button type="button" class="btn sec" data-action="webauthn-register">Add a security key</button>
+        <button type="button" class="btn sec" data-action="security-close">Close</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -681,6 +914,13 @@
       <div id="detailBreakdown"></div>
     </div>
 
+    <div class="detail-panel" id="detailFeaturesPanel">
+      <h3>Audio features</h3>
+      <div id="detailFeatures">
+        <div class="feat-empty">Loading audio features&hellip;</div>
+      </div>
+    </div>
+
     <div class="detail-panel">
       <h3>Recent uploads</h3>
       <div id="detailVideos"></div>
@@ -744,6 +984,13 @@ var COLORS = ['#c8a84b','#e05c8a','#4ecb71','#5c9de0','#e0935c','#a05ce0'];
 var PROXY_BASE = (typeof localStorage !== 'undefined' && localStorage.getItem('tx_api_base')) || '';
 var backendOk = true; // flipped to false if a proxy request fails
 var authUser = null;  // populated by checkSession(); null = signed out
+// Plan tier (Phase 2d). Populated by loadPlan() after a successful sign-in.
+//   null      → unknown (signed out, or before /api/payments/plan resolves)
+//   { plan: 'free' | 'paid', stripeStatus, ... } → resolved
+// Drives the header pill + the audio-features gate UI. We re-fetch on
+// sign-in, after a successful checkout redirect, and after the Customer
+// Portal redirect (subscription state may have changed there too).
+var userPlan = null;
 
 var artistData = [];
 var trendsChart = null;
@@ -754,9 +1001,19 @@ var trendsChart = null;
 // offline / during a cold start.
 var SEED_NAMES = ['Megan Thee Stallion','Tay Money','Asian Doll','Cuban Doll','KenTheMan','GloRilla'];
 
-function buildArtistData(names) {
-  return names.map(function(n) {
-    return Object.assign({ name: n }, metaFor(n), { score: 0, views: 0, subCount: 0, videos: [] });
+// Accepts either an array of plain names (legacy / demo seed) or an array of
+// {id, name} rows from /api/artists. We carry `id` through so the detail
+// view can call /api/artists/:id/features (UUID-keyed). Demo-mode rows have
+// no id; the features panel just stays hidden in that case.
+function buildArtistData(rows) {
+  return (rows || []).map(function(r) {
+    var name = typeof r === 'string' ? r : r.name;
+    var id   = typeof r === 'string' ? null : (r.id || null);
+    return Object.assign(
+      { id: id, name: name },
+      metaFor(name),
+      { score: 0, views: 0, subCount: 0, videos: [] }
+    );
   });
 }
 
@@ -765,8 +1022,10 @@ async function loadRoster() {
     var r = await fetch(PROXY_BASE + '/api/artists', { credentials: 'include' });
     if (!r.ok) { throw new Error('HTTP ' + r.status); }
     var body = await r.json();
-    var names = (body.rows || []).map(function(row) { return row.name; });
-    return names.length ? names : SEED_NAMES;
+    // Keep {id, name} pairs so downstream callers can reach /api/artists/:id/*.
+    // Drop rows without a name (shouldn't happen, but defensive).
+    var rows = (body.rows || []).filter(function(row) { return row && row.name; });
+    return rows.length ? rows : SEED_NAMES;
   } catch (e) {
     // Backend unreachable or signed-out — fall back to the seed list so
     // the page still renders something in the demo banner state.
@@ -795,6 +1054,24 @@ window.onload = async function() {
     history.replaceState(null, '', location.pathname);
   }
 
+  // Phase 2d: post-Stripe-Checkout redirect. The backend's success_url is
+  // /?checkout=success and the cancel_url is /?checkout=cancel. We show a
+  // flash banner for both, scrub the query so a refresh doesn't keep it,
+  // and (for success) refresh the plan tier on the next tick — the
+  // checkout.session.completed webhook may land before or after this page
+  // load, so we re-poll once after a short delay to catch the flip.
+  var checkoutFlag = params.get('checkout');
+  if (checkoutFlag === 'success') {
+    showFlash('Subscription started. Audio features are unlocking now.');
+    history.replaceState(null, '', location.pathname);
+  } else if (checkoutFlag === 'cancel') {
+    showFlash('Checkout canceled. Nothing was charged.');
+    history.replaceState(null, '', location.pathname);
+  }
+  if (params.get('portal') === 'closed') {
+    history.replaceState(null, '', location.pathname);
+  }
+
   updateDemoBanner();
   await checkSession();     // fills authUser if a valid cookie exists
   renderAuthWidget();
@@ -802,8 +1079,32 @@ window.onload = async function() {
   // Pull the live roster once we know the session state. Signed-out users
   // still see SEED_NAMES (loadRoster's 401 fallback) so the demo view works.
   if (authUser) {
-    var names = await loadRoster();
-    artistData = buildArtistData(names);
+    var roster = await loadRoster();   // [{id, name}, ...] or SEED_NAMES on fallback
+    artistData = buildArtistData(roster);
+    // Phase 2d: pull the plan tier so the header pill renders. We don't
+    // block on it (refreshAll runs in parallel below) — when it lands it
+    // re-renders the pill on its own.
+    loadPlan();
+    // After a successful checkout redirect, the Stripe webhook race can
+    // mean our first /api/payments/plan call still sees 'free'. Re-poll
+    // a couple of times so the pill flips without a manual refresh, then
+    // refresh the dashboard so the gated feature panels become unlocked.
+    if (checkoutFlag === 'success') {
+      var attempts = 0;
+      var pollPlan = function() {
+        attempts++;
+        loadPlan().then(function() {
+          if (userPlan && userPlan.plan === 'paid') {
+            // Plan flipped — refresh artistData so the gate sentinel is
+            // replaced by the real features on the next render pass.
+            refreshAll();
+          } else if (attempts < 5) {
+            setTimeout(pollPlan, 1500);
+          }
+        });
+      };
+      setTimeout(pollPlan, 1000);
+    }
   }
 
   // Hash-routed artist detail view. Listen for subsequent changes + route
@@ -866,6 +1167,18 @@ function wireStaticHandlers() {
         case 'signout':           signOut(); break;
         case 'auth-cancel':       closeAuth(); break;
         case 'auth-switch':       switchAuth(arg); break;
+        case 'auth-2fa-toggle':   toggle2faMode(); break;
+        case 'security-open':           openSecurity(); break;
+        case 'security-close':          closeSecurity(); break;
+        case 'security-overlay-bg':     if (ev.target === t) { closeSecurity(); } break;
+        case 'security-enroll-start':   startEnroll(); break;
+        case 'security-codes-ack':      ackCodes(); break;
+        case 'security-copy-codes':     copySecCodes(); break;
+        case 'security-download-codes': downloadSecCodes(); break;
+        case 'security-regenerate':     regenerateCodes(); break;
+        case 'webauthn-register':       webauthnRegister(); break;
+        case 'webauthn-authenticate':   webauthnAuthenticate(); break;
+        case 'webauthn-delete':         webauthnDelete(arg, t); break;
         case 'dismiss-flash':     dismissFlash(); break;
         case 'go-home':           location.href = '/'; break;
         case 'auth-overlay-bg':   if (ev.target === t) { closeAuth(); } break;
@@ -879,6 +1192,9 @@ function wireStaticHandlers() {
           break;
         case 'compare-go':        goToCompareView(); break;
         case 'compare-clear':     clearCompareSet(); break;
+        case 'plan-pill':         onPlanPillClick(); break;
+        case 'plan-upgrade':      startCheckout(arg || null); break;
+        case 'plan-portal':       openCustomerPortal(); break;
         case 'noop':              break;
       }
     });
@@ -906,13 +1222,17 @@ function updateDemoBanner() {
 }
 
 // Ask the backend who we are. 401 = signed out (not an error).
+// On success, also caches the mfa block so the Security button can render
+// the right state without a second round-trip.
+var lastMeMfa = null;
 async function checkSession() {
   try {
     var r = await fetch(PROXY_BASE + '/api/auth/me', { credentials: 'include' });
-    if (r.status === 401) { authUser = null; backendOk = true; updateDemoBanner(); return; }
+    if (r.status === 401) { authUser = null; lastMeMfa = null; backendOk = true; updateDemoBanner(); return; }
     if (!r.ok) { throw new Error('HTTP ' + r.status); }
     var body = await r.json();
     authUser = body.user || null;
+    lastMeMfa = body.mfa || null;
     backendOk = true;
   } catch (e) {
     // Network / DNS failure: treat as backend down.
@@ -925,8 +1245,14 @@ async function checkSession() {
 
 // Small fetch helper. Sends the session cookie and distinguishes:
 //   401 → signed-out path (authUser = null, re-render)
+//   402 → paid-tier gate (Phase 2d). The thrown Error carries .status
+//         and .body so callers can render an inline upgrade card.
 //   network / 5xx → backend down
-//   other → rethrow with server message
+//   other → rethrow with server message + .status / .body attached
+//
+// Phase 2d: callers that need to branch on status (e.g. the artist
+// features fetch wants 402 → gated UI, not "couldn't load") inspect
+// `err.status` rather than parsing the message string.
 async function proxyGet(path) {
   try {
     var r = await fetch(PROXY_BASE + path, { credentials: 'include' });
@@ -935,15 +1261,28 @@ async function proxyGet(path) {
       backendOk = true;
       renderAuthWidget();
       updateDemoBanner();
-      throw new Error('unauthenticated');
+      var unauthErr = new Error('unauthenticated');
+      unauthErr.status = 401;
+      throw unauthErr;
     }
     var body = await r.json().catch(function() { return {}; });
-    if (!r.ok) { throw new Error(body.message || ('HTTP ' + r.status)); }
+    if (!r.ok) {
+      var err = new Error(body.message || ('HTTP ' + r.status));
+      err.status = r.status;
+      err.body   = body;
+      // 402 is "paid tier required" — the backend is healthy, the user
+      // is signed in, they just don't have a paid plan. Don't flip
+      // backendOk in this case; let the caller render the upgrade UI.
+      if (r.status !== 402) { backendOk = false; }
+      else { backendOk = true; }
+      updateDemoBanner();
+      throw err;
+    }
     backendOk = true;
     updateDemoBanner();
     return body;
   } catch (e) {
-    if (e && e.message === 'unauthenticated') { throw e; }
+    if (e && (e.status === 401 || e.status === 402)) { throw e; }
     backendOk = false;
     updateDemoBanner();
     throw e;
@@ -951,26 +1290,173 @@ async function proxyGet(path) {
 }
 
 // ── AUTH UI ──────────────────────────────────────────────────────────────
-// 'login' | 'signup' | 'forgot'  — forgot has no password field and POSTs
-// to /api/auth/forgot. The success message is enumeration-safe (same
-// wording whether the email exists or not).
+// 'login' | 'signup' | 'forgot' | '2fa'
+//   * forgot has no password field and POSTs to /api/auth/forgot. The
+//     success message is enumeration-safe (same wording whether the email
+//     exists or not).
+//   * '2fa' is entered when /api/auth/login returns {needs2fa:true} — the
+//     pre_2fa cookie is already set; we just need a 6-digit code (or a
+//     recovery code) to promote the session.
 var authMode = 'login';
+// Toggle inside the 2fa step: false → TOTP code, true → recovery code.
+var authUseRecovery = false;
+// Which 2FA methods the server told us are available for this user.
+// Populated by /api/auth/login when needs2fa=true.
+var auth2faMethods = { totp: true, webauthn: false };
 
 function renderAuthWidget() {
   var who   = document.getElementById('authWho');
   var btnOut = document.getElementById('btnSignOut');
   var btnIn  = document.getElementById('btnSignIn');
   var btnUp  = document.getElementById('btnSignUp');
+  var btnSec = document.getElementById('btnSecurity');
   if (authUser) {
     who.innerHTML = 'Signed in as <b>' + escapeHtml(authUser.email) + '</b>';
     btnOut.classList.remove('hidden');
+    btnSec.classList.remove('hidden');
     btnIn.classList.add('hidden');
     btnUp.classList.add('hidden');
   } else {
     who.innerHTML = '&nbsp;';
     btnOut.classList.add('hidden');
+    btnSec.classList.add('hidden');
     btnIn.classList.remove('hidden');
     btnUp.classList.remove('hidden');
+  }
+  renderPlanPill();
+}
+
+// Phase 2d: render the plan tier pill in the header. Hidden when signed
+// out (no plan to show) or when /api/payments/plan hasn't resolved yet.
+// "Free" → click opens Stripe Checkout. "Paid" → click opens the Stripe
+// Customer Portal so a user can update payment / cancel without leaving.
+function renderPlanPill() {
+  var pill = document.getElementById('planPill');
+  if (!pill) { return; }
+  if (!authUser || !userPlan) {
+    pill.classList.add('hidden');
+    pill.classList.remove('paid', 'free');
+    return;
+  }
+  pill.classList.remove('hidden');
+  if (userPlan.plan === 'paid') {
+    pill.classList.add('paid');
+    pill.classList.remove('free');
+    pill.textContent = 'Paid';
+    pill.title = 'Manage subscription';
+  } else {
+    pill.classList.add('free');
+    pill.classList.remove('paid');
+    pill.textContent = 'Upgrade';
+    pill.title = 'Unlock audio features (Stripe Checkout)';
+  }
+}
+
+// Phase 2d: pull the coarse plan tier so the header pill + the audio
+// gate know which UI to show. Soft-fails — a network blip just leaves
+// userPlan = null (pill stays hidden, gate falls back to "couldn't load").
+async function loadPlan() {
+  if (!authUser) { userPlan = null; renderPlanPill(); return; }
+  try {
+    var body = await proxyGet('/api/payments/plan');
+    // Backend returns { kind: 'payments.plan', plan, stripeStatus, ... }
+    userPlan = body && body.plan
+      ? { plan: body.plan, stripeStatus: body.stripeStatus,
+          currentPeriodEnd: body.currentPeriodEnd,
+          cancelAtPeriodEnd: body.cancelAtPeriodEnd }
+      : { plan: 'free', stripeStatus: 'free' };
+  } catch (e) {
+    // 401 already redirected to signed-out state; for any other error
+    // assume free (safer than silently rendering "Paid" on an error).
+    userPlan = authUser ? { plan: 'free', stripeStatus: 'unknown' } : null;
+  }
+  renderPlanPill();
+}
+
+// Click handler for the header pill. Free → checkout, Paid → portal.
+// We don't pre-fill priceId from the frontend — the backend has a
+// configured default Stripe price (STRIPE_PRICE_DEFAULT) so the user
+// just clicks one button to land on the hosted Checkout page.
+async function onPlanPillClick() {
+  if (!authUser) { return; }
+  var pill = document.getElementById('planPill');
+  if (pill && pill.hasAttribute('disabled')) { return; }
+  if (pill) { pill.setAttribute('disabled', 'disabled'); }
+  try {
+    if (userPlan && userPlan.plan === 'paid') {
+      await openCustomerPortal();
+    } else {
+      await startCheckout();
+    }
+  } finally {
+    if (pill) { pill.removeAttribute('disabled'); }
+  }
+}
+
+// POST /api/payments/checkout → { url } → redirect to Stripe Checkout.
+// On the frontend we only carry the priceId if the backend explicitly
+// asked for one (multi-plan future); for now we let the backend pick
+// its configured default. Errors land in a flash banner.
+async function startCheckout(priceId) {
+  try {
+    var r = await fetch(PROXY_BASE + '/api/payments/checkout', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(priceId ? { priceId: priceId } : {})
+    });
+    var body = await r.json().catch(function() { return {}; });
+    if (r.status === 401) {
+      authUser = null; userPlan = null;
+      renderAuthWidget();
+      openAuth('login');
+      return;
+    }
+    if (r.status === 503) {
+      showFlash('Subscriptions are temporarily unavailable. Please try again later.');
+      return;
+    }
+    if (!r.ok || !body || !body.url) {
+      showFlash(body && body.message ? body.message : 'Couldn\u2019t start checkout.');
+      return;
+    }
+    // Hand off to Stripe-hosted Checkout. successUrl + cancelUrl are
+    // configured on the backend; both come back to / with a query param
+    // we read on the next page load.
+    location.assign(body.url);
+  } catch (e) {
+    showFlash('Network error starting checkout.');
+  }
+}
+
+// POST /api/payments/portal → { url } → redirect to Customer Portal.
+// Same shape / error handling as startCheckout.
+async function openCustomerPortal() {
+  try {
+    var r = await fetch(PROXY_BASE + '/api/payments/portal', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}'
+    });
+    var body = await r.json().catch(function() { return {}; });
+    if (r.status === 401) {
+      authUser = null; userPlan = null;
+      renderAuthWidget();
+      openAuth('login');
+      return;
+    }
+    if (r.status === 503) {
+      showFlash('Subscription management is temporarily unavailable.');
+      return;
+    }
+    if (!r.ok || !body || !body.url) {
+      showFlash(body && body.message ? body.message : 'Couldn\u2019t open the customer portal.');
+      return;
+    }
+    location.assign(body.url);
+  } catch (e) {
+    showFlash('Network error opening customer portal.');
   }
 }
 
@@ -982,14 +1468,18 @@ function openAuth(mode) {
   ok.classList.add('hidden');  ok.textContent  = '';
   document.getElementById('authEmail').value = '';
   document.getElementById('authPass').value  = '';
+  document.getElementById('auth2faCode').value = '';
   document.getElementById('authOverlay').classList.remove('hidden');
-  setTimeout(function() { document.getElementById('authEmail').focus(); }, 30);
+  // 2fa mode focuses its own input via switchAuth() — don't fight it.
+  if (authMode !== '2fa') {
+    setTimeout(function() { document.getElementById('authEmail').focus(); }, 30);
+  }
 }
 
 function closeAuth() { document.getElementById('authOverlay').classList.add('hidden'); }
 
 function switchAuth(mode) {
-  authMode = (mode === 'signup' || mode === 'forgot') ? mode : 'login';
+  authMode = (mode === 'signup' || mode === 'forgot' || mode === '2fa') ? mode : 'login';
 
   // Clear any stale success message left over from a previous submit.
   var ok = document.getElementById('authOk');
@@ -998,54 +1488,179 @@ function switchAuth(mode) {
   var isSignup = authMode === 'signup';
   var isForgot = authMode === 'forgot';
   var isLogin  = authMode === 'login';
+  var is2fa    = authMode === '2fa';
 
   document.getElementById('authTitle').textContent =
     isSignup ? 'Create account' :
     isForgot ? 'Reset your password' :
+    is2fa    ? 'Two-factor verification' :
                'Sign in';
 
   document.getElementById('authSubmit').textContent =
     isSignup ? 'Create account' :
     isForgot ? 'Send reset link' :
+    is2fa    ? 'Verify' :
                'Sign in';
 
   document.getElementById('authHint').textContent =
     isSignup ? 'Create an account to load live YouTube + Trends data. Password must be 12+ characters.' :
     isForgot ? "Enter your email. We'll send a reset link if an account exists." :
+    is2fa    ? 'Enter the 6-digit code from your authenticator app to finish signing in.' :
                'Sign in to load live YouTube + Trends data.';
 
-  // Toggle row: different call-to-action per mode.
-  document.getElementById('authToggle').innerHTML =
-    isSignup ? 'Have an account? <a data-action="auth-switch" data-arg="login">Sign in</a>' :
-    isForgot ? '<a data-action="auth-switch" data-arg="login">Back to sign in</a>' :
-               'No account? <a data-action="auth-switch" data-arg="signup">Create one</a>';
+  // Toggle row: different call-to-action per mode. 2fa hides the toggle
+  // entirely — the only "back" path is Cancel (which clears the pre-cookie
+  // by way of POST /api/auth/logout).
+  var toggleEl = document.getElementById('authToggle');
+  if (is2fa) {
+    toggleEl.classList.add('hidden');
+  } else {
+    toggleEl.classList.remove('hidden');
+    toggleEl.innerHTML =
+      isSignup ? 'Have an account? <a data-action="auth-switch" data-arg="login">Sign in</a>' :
+      isForgot ? '<a data-action="auth-switch" data-arg="login">Back to sign in</a>' :
+                 'No account? <a data-action="auth-switch" data-arg="signup">Create one</a>';
+  }
 
-  // Password field + Forgot-link are hidden in forgot mode.
+  // Email + Password rows. Hidden in forgot's password sub-step + always in 2fa step.
+  var emailWrap  = document.getElementById('authEmailWrap');
+  var emailInput = document.getElementById('authEmail');
   var passWrap   = document.getElementById('authPassWrap');
   var passInput  = document.getElementById('authPass');
   var forgotLink = document.getElementById('forgotLink');
+  var twoFaWrap  = document.getElementById('auth2faWrap');
+  var twoFaInput = document.getElementById('auth2faCode');
 
-  if (isForgot) {
+  if (is2fa) {
+    emailWrap.classList.add('hidden');
     passWrap.classList.add('hidden');
+    emailInput.required = false;
     passInput.required = false;
+    twoFaWrap.classList.remove('hidden');
+    // Show whichever method rows are available. If the user has both
+    // TOTP and a security key we show both — they pick. If only one,
+    // hide the other to keep the modal tidy.
+    var methods = auth2faMethods || { totp: true, webauthn: false };
+    var totpRow = document.getElementById('auth2faTotpRow');
+    var waRow   = document.getElementById('auth2faWebauthnRow');
+    if (totpRow) totpRow.classList.toggle('hidden', !methods.totp);
+    if (waRow)   waRow.classList.toggle('hidden',  !methods.webauthn);
+    // The submit button only validates the TOTP code path. If only
+    // webauthn is available, hide it to avoid an empty-input submit.
+    var submitBtn = document.getElementById('authSubmit');
+    if (submitBtn) submitBtn.classList.toggle('hidden', !methods.totp);
+    twoFaInput.required = !!methods.totp;
+    // Reset to the TOTP variant whenever we re-enter 2fa mode.
+    authUseRecovery = false;
+    update2faPrompt();
+    if (methods.totp) {
+      setTimeout(function() { twoFaInput.focus(); twoFaInput.value = ''; }, 30);
+    }
   } else {
-    passWrap.classList.remove('hidden');
-    passInput.required = true;
-    passInput.setAttribute('autocomplete', isSignup ? 'new-password' : 'current-password');
+    emailWrap.classList.remove('hidden');
+    emailInput.required = true;
+    twoFaWrap.classList.add('hidden');
+    twoFaInput.required = false;
+    if (isForgot) {
+      passWrap.classList.add('hidden');
+      passInput.required = false;
+    } else {
+      passWrap.classList.remove('hidden');
+      passInput.required = true;
+      passInput.setAttribute('autocomplete', isSignup ? 'new-password' : 'current-password');
+    }
   }
   // Forgot link is only useful when someone is trying to sign in.
   forgotLink.classList.toggle('hidden', !isLogin);
 }
 
+// Toggle the 2FA step between "TOTP code" and "recovery code". Just a
+// label/placeholder flip — the form state machine doesn't need to fork.
+function update2faPrompt() {
+  var label = document.getElementById('auth2faLabel');
+  var input = document.getElementById('auth2faCode');
+  var toggle = document.getElementById('auth2faToggle');
+  if (authUseRecovery) {
+    label.textContent = 'Recovery code';
+    input.placeholder = 'XXXX-XXXX-XXXX-XXXX-XXXX';
+    input.setAttribute('inputmode', 'text');
+    input.setAttribute('autocomplete', 'off');
+    toggle.textContent = 'Use authenticator code instead';
+  } else {
+    label.textContent = '6-digit code';
+    input.placeholder = '123456';
+    input.setAttribute('inputmode', 'numeric');
+    input.setAttribute('autocomplete', 'one-time-code');
+    toggle.textContent = 'Use a recovery code instead';
+  }
+}
+
+function toggle2faMode() {
+  authUseRecovery = !authUseRecovery;
+  update2faPrompt();
+  var input = document.getElementById('auth2faCode');
+  input.value = '';
+  input.focus();
+}
+
 async function submitAuth(ev) {
   ev.preventDefault();
-  var email = document.getElementById('authEmail').value.trim();
-  var pass  = document.getElementById('authPass').value;
   var err   = document.getElementById('authErr');
   var ok    = document.getElementById('authOk');
   var btn   = document.getElementById('authSubmit');
   err.classList.add('hidden'); err.textContent = '';
   ok.classList.add('hidden');  ok.textContent  = '';
+
+  // 2FA step is its own POST — pre_2fa cookie is already in place from
+  // the password step, so we don't need email/password here.
+  if (authMode === '2fa') {
+    var twoFaInput = document.getElementById('auth2faCode').value.trim();
+    if (!twoFaInput) {
+      err.textContent = authUseRecovery
+        ? 'Enter a recovery code.'
+        : 'Enter the 6-digit code from your authenticator app.';
+      err.classList.remove('hidden');
+      return false;
+    }
+    btn.disabled = true;
+    try {
+      var payload = authUseRecovery ? { recoveryCode: twoFaInput } : { code: twoFaInput };
+      var r = await fetch(PROXY_BASE + '/api/auth/2fa/verify', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      var body = await r.json().catch(function() { return {}; });
+      if (!r.ok) { throw new Error(body.message || ('HTTP ' + r.status)); }
+      authUser = body.user;
+      backendOk = true;
+      renderAuthWidget();
+      updateDemoBanner();
+      closeAuth();
+      // If the user just spent a recovery code, nudge them about how many
+      // remain so they regenerate before running out.
+      if (body.usedRecovery && typeof body.recoveryCodesRemaining === 'number') {
+        showFlash(
+          'Signed in with a recovery code. ' +
+          body.recoveryCodesRemaining + ' code' +
+          (body.recoveryCodesRemaining === 1 ? '' : 's') +
+          ' left — regenerate from Security when convenient.'
+        );
+      }
+      loadPlan(); // Phase 2d: surface Free/Paid pill once we know who the user is.
+      await refreshAll();
+    } catch (e) {
+      err.textContent = (e && e.message) ? e.message : 'something went wrong';
+      err.classList.remove('hidden');
+    } finally {
+      btn.disabled = false;
+    }
+    return false;
+  }
+
+  var email = document.getElementById('authEmail').value.trim();
+  var pass  = document.getElementById('authPass').value;
 
   if (authMode === 'signup' && pass.length < 12) {
     err.textContent = 'Password must be at least 12 characters.';
@@ -1077,11 +1692,21 @@ async function submitAuth(ev) {
     });
     var body = await r.json().catch(function() { return {}; });
     if (!r.ok) { throw new Error(body.message || ('HTTP ' + r.status)); }
+    // 2FA-enabled accounts: server set a short-lived pre_2fa cookie and is
+    // waiting on a code. Switch the modal into 2fa mode in place — no full
+    // session has been issued yet, so authUser stays null.
+    if (body.needs2fa) {
+      // Cache available methods so the 2fa form shows the right buttons.
+      auth2faMethods = body.methods || { totp: true, webauthn: false };
+      switchAuth('2fa');
+      return false;
+    }
     authUser = body.user;
     backendOk = true;
     renderAuthWidget();
     updateDemoBanner();
     closeAuth();
+    loadPlan(); // Phase 2d: surface Free/Paid pill once we know who the user is.
     await refreshAll(); // now we can pull live data
   } catch (e) {
     err.textContent = (e && e.message) ? e.message : 'something went wrong';
@@ -1097,9 +1722,535 @@ async function signOut() {
     await fetch(PROXY_BASE + '/api/auth/logout', { method: 'POST', credentials: 'include' });
   } catch (_) { /* logout is best-effort */ }
   authUser = null;
+  lastMeMfa = null;
+  userPlan = null; // Phase 2d: pill hides automatically when both are null.
   renderAuthWidget();
   updateDemoBanner();
   await refreshAll(); // will fall back to sample data since /api/youtube now 401s
+}
+
+// ── SECURITY PANEL (2FA enroll / disable) ────────────────────────────────
+// One overlay (#securityOverlay) that flips between five views by id:
+//   #secViewOff      — 2FA off, button to start enrollment
+//   #secViewEnroll   — QR + secret, waiting for user to enter a code
+//   #secViewCodes    — 10 recovery codes shown ONCE
+//   #secViewOn       — 2FA on, button to disable + recovery-codes-left
+//   (loading is signaled by hint text + all views hidden)
+//
+// All forms route through showSecView() which keeps exactly one visible at a
+// time. Errors and success bubble up to #secErr / #secOk regardless of view.
+var secEnrollContext = null;       // {secret, otpauthUrl, qrDataUrl}
+var secLastRecoveryCodes = null;   // remembered for copy/download buttons
+
+function showSecView(name) {
+  ['secViewOff','secViewEnroll','secViewCodes','secViewOn'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    if (id === name) el.classList.remove('hidden');
+    else el.classList.add('hidden');
+  });
+}
+
+function setSecError(msg) {
+  var err = document.getElementById('secErr');
+  err.textContent = msg || '';
+  err.classList.toggle('hidden', !msg);
+}
+function setSecOk(msg) {
+  var ok = document.getElementById('secOk');
+  ok.textContent = msg || '';
+  ok.classList.toggle('hidden', !msg);
+}
+
+async function openSecurity() {
+  // Reset state so re-opening doesn't show stale codes/QR.
+  secEnrollContext = null;
+  secLastRecoveryCodes = null;
+  setSecError('');
+  setSecOk('');
+  document.getElementById('secHint').textContent = 'Loading…';
+  showSecView(null);
+  document.getElementById('securityOverlay').classList.remove('hidden');
+
+  // Refresh /me so we know the current 2FA state and recovery code count.
+  await checkSession();
+  if (!authUser) {
+    setSecError('You need to be signed in to manage 2FA.');
+    return;
+  }
+  renderSecurityState();
+}
+
+function closeSecurity() {
+  document.getElementById('securityOverlay').classList.add('hidden');
+}
+
+function renderSecurityState() {
+  setSecError(''); setSecOk('');
+  var hint = document.getElementById('secHint');
+  var anyEnabled = !!(lastMeMfa && (lastMeMfa.anyEnabled
+    || lastMeMfa.enrolled
+    || (typeof lastMeMfa.webauthnCount === 'number' && lastMeMfa.webauthnCount > 0)));
+
+  if (anyEnabled) {
+    var totpOn = !!(lastMeMfa && lastMeMfa.enrolled);
+    var waCount = (lastMeMfa && typeof lastMeMfa.webauthnCount === 'number')
+      ? lastMeMfa.webauthnCount : 0;
+
+    hint.textContent = 'Two-factor authentication is enabled on your account.';
+
+    // TOTP section visibility: hide the disable form + recovery row entirely
+    // when only WebAuthn is on (otherwise users see a useless empty form).
+    var totpStatus = document.getElementById('secTotpStatus');
+    var totpDisable = document.getElementById('secTotpDisableWrap');
+    var recoveryRow = document.getElementById('secRecoveryRow');
+    if (totpOn) {
+      var details = document.getElementById('secOnDetails');
+      if (lastMeMfa.enrolledAt) {
+        try { details.textContent = ' (enabled ' + new Date(lastMeMfa.enrolledAt).toLocaleDateString() + ')'; }
+        catch (_) { details.textContent = ''; }
+      } else {
+        details.textContent = '';
+      }
+      document.getElementById('secCodesLeft').textContent =
+        String(lastMeMfa.recoveryCodesRemaining != null ? lastMeMfa.recoveryCodesRemaining : '—');
+      document.getElementById('secDisablePass').value = '';
+      document.getElementById('secDisableCode').value = '';
+      totpStatus.classList.remove('hidden');
+      totpDisable.classList.remove('hidden');
+      recoveryRow.classList.remove('hidden');
+    } else {
+      totpStatus.classList.add('hidden');
+      totpDisable.classList.add('hidden');
+      recoveryRow.classList.add('hidden');
+    }
+
+    var summary = document.getElementById('secWebauthnSummary');
+    if (waCount === 0) summary.textContent = 'none registered.';
+    else summary.textContent = waCount + ' registered.';
+    // Pull the live list so each row gets an accurate name + last-used.
+    refreshWebauthnList();
+
+    showSecView('secViewOn');
+  } else {
+    hint.textContent = 'Add a second factor so a stolen password alone can\u2019t sign in.';
+    showSecView('secViewOff');
+  }
+}
+
+async function startEnroll() {
+  setSecError(''); setSecOk('');
+  document.getElementById('secHint').textContent = 'Generating a fresh secret…';
+  showSecView(null);
+  try {
+    var r = await fetch(PROXY_BASE + '/api/auth/2fa/enroll', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}'
+    });
+    var body = await r.json().catch(function() { return {}; });
+    if (!r.ok) { throw new Error(body.message || ('HTTP ' + r.status)); }
+    secEnrollContext = body;
+    document.getElementById('secQr').src = body.qrDataUrl;
+    document.getElementById('secSecret').textContent = body.secret;
+    document.getElementById('secEnrollCode').value = '';
+    document.getElementById('secHint').textContent = 'Step 2: scan the QR or paste the secret, then enter the 6-digit code.';
+    showSecView('secViewEnroll');
+    setTimeout(function() { document.getElementById('secEnrollCode').focus(); }, 30);
+  } catch (e) {
+    setSecError((e && e.message) ? e.message : 'Could not start enrollment.');
+    showSecView('secViewOff');
+  }
+}
+
+async function submitEnrollVerify(ev) {
+  ev.preventDefault();
+  setSecError(''); setSecOk('');
+  var code = document.getElementById('secEnrollCode').value.trim();
+  var btn  = document.getElementById('secEnrollSubmit');
+  if (!/^\d{6}$/.test(code)) {
+    setSecError('Enter the 6-digit code from your authenticator app.');
+    return false;
+  }
+  btn.disabled = true;
+  try {
+    var r = await fetch(PROXY_BASE + '/api/auth/2fa/enroll/verify', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: code })
+    });
+    var body = await r.json().catch(function() { return {}; });
+    if (!r.ok) { throw new Error(body.message || ('HTTP ' + r.status)); }
+    secLastRecoveryCodes = body.recoveryCodes || [];
+    document.getElementById('secCodes').textContent = secLastRecoveryCodes.join('\n');
+    document.getElementById('secHint').textContent = '2FA is on. Save your recovery codes — you won\u2019t see them again.';
+    showSecView('secViewCodes');
+    // Refresh cached /me so the next "Done" → state shows enrolled=true.
+    await checkSession();
+  } catch (e) {
+    setSecError((e && e.message) ? e.message : 'Verification failed.');
+  } finally {
+    btn.disabled = false;
+  }
+  return false;
+}
+
+function copySecCodes() {
+  if (!secLastRecoveryCodes || !secLastRecoveryCodes.length) return;
+  var text = secLastRecoveryCodes.join('\n');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(
+      function() { setSecOk('Codes copied to clipboard.'); },
+      function() { setSecError('Copy failed — select the codes manually and copy.'); }
+    );
+  } else {
+    setSecError('Clipboard not available — select the codes manually and copy.');
+  }
+}
+
+function downloadSecCodes() {
+  if (!secLastRecoveryCodes || !secLastRecoveryCodes.length) return;
+  var text =
+    'TX Rapper Tracker — 2FA recovery codes\n' +
+    'Account: ' + (authUser ? authUser.email : '') + '\n' +
+    'Generated: ' + new Date().toISOString() + '\n' +
+    'Each code works ONCE. Keep this file safe.\n\n' +
+    secLastRecoveryCodes.join('\n') + '\n';
+  var blob = new Blob([text], { type: 'text/plain' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'tx-rapper-tracker-recovery-codes.txt';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function() {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 0);
+}
+
+function ackCodes() {
+  // User says they've stored the codes — we drop them from memory and
+  // return to the "2FA on" state.
+  secLastRecoveryCodes = null;
+  renderSecurityState();
+}
+
+async function regenerateCodes() {
+  // Re-enroll path through the API would replace the secret too — but the
+  // user just wants new recovery codes. We expose this by hitting /enroll
+  // followed by /enroll/verify with the SAME secret + a fresh code... not
+  // worth it for v1. Simpler: tell the user to disable + re-enable to
+  // refresh codes. This keeps the route surface tight.
+  setSecOk('');
+  setSecError(
+    'To regenerate recovery codes, disable 2FA and re-enable it. The new ' +
+    'enrollment ships a fresh batch of 10 codes.'
+  );
+}
+
+async function submitDisable2fa(ev) {
+  ev.preventDefault();
+  setSecError(''); setSecOk('');
+  var pass = document.getElementById('secDisablePass').value;
+  var code = document.getElementById('secDisableCode').value.trim();
+  var btn  = document.getElementById('secDisableSubmit');
+  if (!pass) { setSecError('Enter your current password.'); return false; }
+  if (!/^\d{6}$/.test(code)) { setSecError('Enter the 6-digit code from your app.'); return false; }
+  btn.disabled = true;
+  try {
+    var r = await fetch(PROXY_BASE + '/api/auth/2fa/disable', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword: pass, code: code })
+    });
+    var body = await r.json().catch(function() { return {}; });
+    if (!r.ok) { throw new Error(body.message || ('HTTP ' + r.status)); }
+    setSecOk('2FA has been disabled.');
+    await checkSession();
+    renderSecurityState();
+  } catch (e) {
+    setSecError((e && e.message) ? e.message : 'Could not disable 2FA.');
+  } finally {
+    btn.disabled = false;
+  }
+  return false;
+}
+
+// ── WEBAUTHN (passkeys / hardware keys) ───────────────────────────────────
+// The backend speaks base64url (URL-safe, no padding) on the wire. The browser's
+// WebAuthn API speaks ArrayBuffer. These two helpers bridge that boundary.
+function b64urlToBuf(s) {
+  if (!s) return new Uint8Array(0).buffer;
+  // Re-pad and convert URL-safe alphabet back to standard.
+  var pad = s.length % 4 === 0 ? '' : '='.repeat(4 - (s.length % 4));
+  var b64 = (s + pad).replace(/-/g, '+').replace(/_/g, '/');
+  var bin = atob(b64);
+  var out = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out.buffer;
+}
+function bufToB64url(buf) {
+  var bytes = new Uint8Array(buf);
+  var bin = '';
+  // Avoid String.fromCharCode.apply with a huge array — chunk for safety.
+  var CHUNK = 0x8000;
+  for (var i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+// Build a PublicKeyCredentialCreationOptions object the browser accepts from
+// the JSON the server returns. Only the fields with binary content need
+// converting; everything else is already a string/number/object.
+function decodeCreateOptions(opts) {
+  var out = Object.assign({}, opts);
+  out.challenge = b64urlToBuf(opts.challenge);
+  out.user = Object.assign({}, opts.user, { id: b64urlToBuf(opts.user.id) });
+  if (Array.isArray(opts.excludeCredentials)) {
+    out.excludeCredentials = opts.excludeCredentials.map(function(c) {
+      return Object.assign({}, c, { id: b64urlToBuf(c.id) });
+    });
+  }
+  return out;
+}
+function decodeGetOptions(opts) {
+  var out = Object.assign({}, opts);
+  out.challenge = b64urlToBuf(opts.challenge);
+  if (Array.isArray(opts.allowCredentials)) {
+    out.allowCredentials = opts.allowCredentials.map(function(c) {
+      return Object.assign({}, c, { id: b64urlToBuf(c.id) });
+    });
+  }
+  return out;
+}
+
+// Encode a PublicKeyCredential (the result of navigator.credentials.create
+// or .get) into the JSON shape @simplewebauthn/server expects.
+function encodeRegistrationCredential(cred) {
+  var att = cred.response;
+  var transports = (att.getTransports && att.getTransports()) || [];
+  return {
+    id: cred.id,
+    rawId: bufToB64url(cred.rawId),
+    type: cred.type,
+    clientExtensionResults: cred.getClientExtensionResults ? cred.getClientExtensionResults() : {},
+    authenticatorAttachment: cred.authenticatorAttachment || null,
+    response: {
+      clientDataJSON: bufToB64url(att.clientDataJSON),
+      attestationObject: bufToB64url(att.attestationObject),
+      transports: transports,
+    },
+  };
+}
+function encodeAuthenticationCredential(cred) {
+  var asr = cred.response;
+  return {
+    id: cred.id,
+    rawId: bufToB64url(cred.rawId),
+    type: cred.type,
+    clientExtensionResults: cred.getClientExtensionResults ? cred.getClientExtensionResults() : {},
+    authenticatorAttachment: cred.authenticatorAttachment || null,
+    response: {
+      clientDataJSON: bufToB64url(asr.clientDataJSON),
+      authenticatorData: bufToB64url(asr.authenticatorData),
+      signature: bufToB64url(asr.signature),
+      userHandle: asr.userHandle ? bufToB64url(asr.userHandle) : null,
+    },
+  };
+}
+
+// Pull the live list of credentials and paint them into #secWebauthnList.
+// Each row has a friendly name, last-used hint, and a Remove button. Called
+// from renderSecurityState() and after register/delete.
+async function refreshWebauthnList() {
+  var list = document.getElementById('secWebauthnList');
+  if (!list) return;
+  list.innerHTML = '';
+  try {
+    var r = await fetch(PROXY_BASE + '/api/auth/webauthn/credentials', {
+      credentials: 'include',
+    });
+    if (!r.ok) return; // 401 → user signed out mid-render; nothing to paint
+    var body = await r.json().catch(function() { return {}; });
+    var creds = (body && body.credentials) || [];
+    if (!creds.length) {
+      var li = document.createElement('li');
+      li.className = 'sec-keys-empty';
+      li.textContent = 'No security keys registered yet.';
+      list.appendChild(li);
+      return;
+    }
+    creds.forEach(function(c) {
+      var li = document.createElement('li');
+      var label = document.createElement('span');
+      label.className = 'sec-keys-name';
+      label.textContent = c.name || 'Security key';
+      var meta = document.createElement('span');
+      meta.className = 'sec-keys-meta';
+      var added = c.createdAt ? new Date(c.createdAt) : null;
+      var last  = c.lastUsedAt ? new Date(c.lastUsedAt) : null;
+      var hint = '';
+      if (last) {
+        try { hint = 'last used ' + last.toLocaleDateString(); } catch (_) {}
+      } else if (added) {
+        try { hint = 'added ' + added.toLocaleDateString(); } catch (_) {}
+      }
+      meta.textContent = hint ? ' — ' + hint : '';
+      var del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'btn sec sm';
+      del.textContent = 'Remove';
+      del.setAttribute('data-action', 'webauthn-delete');
+      del.setAttribute('data-arg', String(c.id));
+      li.appendChild(label);
+      li.appendChild(meta);
+      li.appendChild(del);
+      list.appendChild(li);
+    });
+  } catch (_) { /* swallow — overlay error UI is reserved for actions */ }
+}
+
+// Add a new security key. Asks for a friendly name, runs the WebAuthn create
+// ceremony, then POSTs the attestation to /register/verify.
+async function webauthnRegister() {
+  setSecError(''); setSecOk('');
+  if (!window.PublicKeyCredential || !navigator.credentials || !navigator.credentials.create) {
+    setSecError('This browser doesn\u2019t support security keys / passkeys.');
+    return;
+  }
+  var name = window.prompt('Name this security key (e.g. "MacBook Touch ID", "YubiKey 5C")', '');
+  if (name === null) return;       // user cancelled
+  name = (name || '').trim().slice(0, 64);
+
+  try {
+    var r = await fetch(PROXY_BASE + '/api/auth/webauthn/register/options', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name || undefined }),
+    });
+    var body = await r.json().catch(function() { return {}; });
+    if (!r.ok) { throw new Error(body.message || ('HTTP ' + r.status)); }
+
+    var cred;
+    try {
+      cred = await navigator.credentials.create({ publicKey: decodeCreateOptions(body.options) });
+    } catch (e) {
+      // NotAllowedError covers user-cancel and timeout — both are normal.
+      throw new Error(
+        e && e.name === 'NotAllowedError'
+          ? 'Cancelled or timed out before the security key responded.'
+          : (e && e.message) || 'The security key prompt failed.'
+      );
+    }
+    if (!cred) throw new Error('No credential returned from the security key.');
+
+    var verifyRes = await fetch(PROXY_BASE + '/api/auth/webauthn/register/verify', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credential: encodeRegistrationCredential(cred) }),
+    });
+    var verifyBody = await verifyRes.json().catch(function() { return {}; });
+    if (!verifyRes.ok) { throw new Error(verifyBody.message || ('HTTP ' + verifyRes.status)); }
+
+    setSecOk('Security key added.');
+    await checkSession();           // pulls fresh webauthnCount into lastMeMfa
+    renderSecurityState();
+  } catch (e) {
+    setSecError((e && e.message) ? e.message : 'Could not add the security key.');
+  }
+}
+
+// Sign in with a registered key. Used from the 2FA prompt (#auth2faWebauthnRow);
+// the pre_2fa cookie is already in place from the password step.
+async function webauthnAuthenticate() {
+  var err = document.getElementById('authErr');
+  var btn = document.getElementById('authWebauthnBtn');
+  err.classList.add('hidden'); err.textContent = '';
+  if (!window.PublicKeyCredential || !navigator.credentials || !navigator.credentials.get) {
+    err.textContent = 'This browser doesn\u2019t support security keys / passkeys.';
+    err.classList.remove('hidden');
+    return;
+  }
+  if (btn) btn.disabled = true;
+  try {
+    var r = await fetch(PROXY_BASE + '/api/auth/webauthn/authenticate/options', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    var body = await r.json().catch(function() { return {}; });
+    if (!r.ok) { throw new Error(body.message || ('HTTP ' + r.status)); }
+
+    var assertion;
+    try {
+      assertion = await navigator.credentials.get({ publicKey: decodeGetOptions(body.options) });
+    } catch (e) {
+      throw new Error(
+        e && e.name === 'NotAllowedError'
+          ? 'Cancelled or timed out before the security key responded.'
+          : (e && e.message) || 'The security key prompt failed.'
+      );
+    }
+    if (!assertion) throw new Error('No assertion returned from the security key.');
+
+    var verifyRes = await fetch(PROXY_BASE + '/api/auth/webauthn/authenticate/verify', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credential: encodeAuthenticationCredential(assertion) }),
+    });
+    var verifyBody = await verifyRes.json().catch(function() { return {}; });
+    if (!verifyRes.ok) { throw new Error(verifyBody.message || ('HTTP ' + verifyRes.status)); }
+
+    // Mirror the TOTP success path in submitAuth.
+    authUser = verifyBody.user;
+    backendOk = true;
+    renderAuthWidget();
+    updateDemoBanner();
+    closeAuth();
+    loadPlan(); // Phase 2d
+    await refreshAll();
+  } catch (e) {
+    err.textContent = (e && e.message) ? e.message : 'something went wrong';
+    err.classList.remove('hidden');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+// Remove a credential by row id (the integer PK from webauthn_credentials).
+// `arg` is the data-arg payload, `t` is the click target.
+async function webauthnDelete(arg, t) {
+  setSecError(''); setSecOk('');
+  var id = parseInt(arg, 10);
+  if (!Number.isFinite(id) || id <= 0) { setSecError('Bad credential id.'); return; }
+  if (!window.confirm('Remove this security key from your account?')) return;
+  if (t) t.disabled = true;
+  try {
+    var r = await fetch(PROXY_BASE + '/api/auth/webauthn/credentials/' + id, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+    if (!r.ok) {
+      var body = await r.json().catch(function() { return {}; });
+      throw new Error(body.message || ('HTTP ' + r.status));
+    }
+    setSecOk('Security key removed.');
+    await checkSession();
+    renderSecurityState();
+  } catch (e) {
+    setSecError((e && e.message) ? e.message : 'Could not remove that key.');
+  } finally {
+    if (t) t.disabled = false;
+  }
 }
 
 // ── RESET VIEW ────────────────────────────────────────────────────────────
@@ -1222,12 +2373,18 @@ async function refreshAll() {
   // Log-scaled score: 10M subs ≈ 70, 1B lifetime views ≈ 45, 1M recent-avg ≈ 18,
   // plus a small trend boost. Log scaling means a megastar doesn't trivially
   // dominate — a smaller artist with a recent breakout still ranks well.
+  //
+  // Phase 2c: featureTerm = featureBonus (0..1) × 5. Caps at +5 so audio
+  // features can nudge ranking but never overpower the subscriber/view
+  // signal. Artists without analyzed tracks contribute 0 so the dashboard
+  // still works end-to-end with an empty queue.
   artistData.forEach(function(a) {
-    var subTerm    = Math.log10((a.subCount       || 0) + 1) * 10;
-    var viewTerm   = Math.log10((a.views          || 0) + 1) * 5;
-    var recentTerm = Math.log10((a.recentAvgViews || 0) + 1) * 3;
-    var trendBoost = a.trend === 'hot' ? 5 : a.trend === 'up' ? 3 : 0;
-    a.score = Math.round(subTerm + viewTerm + recentTerm + trendBoost);
+    var subTerm     = Math.log10((a.subCount       || 0) + 1) * 10;
+    var viewTerm    = Math.log10((a.views          || 0) + 1) * 5;
+    var recentTerm  = Math.log10((a.recentAvgViews || 0) + 1) * 3;
+    var trendBoost  = a.trend === 'hot' ? 5 : a.trend === 'up' ? 3 : 0;
+    var featureTerm = a.featureBonus == null ? 0 : Math.max(0, Math.min(1, Number(a.featureBonus))) * 5;
+    a.score = Math.round(subTerm + viewTerm + recentTerm + trendBoost + featureTerm);
   });
   artistData.sort(function(a, b) { return b.score - a.score; });
 
@@ -1361,6 +2518,35 @@ async function fetchArtistData(artist) {
     }
   } catch (e) {
     console.warn('YT fetch failed for ' + artist.name + ':', e.message);
+  }
+
+  // Phase 2c: pull audio features so the score formula can mix in the
+  // featureBonus. We do this in the same fetch so refreshAll() has the
+  // value before it computes a.score. Failures are swallowed — features
+  // are an enrichment, not load-bearing for the dashboard.
+  //
+  // Phase 2d: a 402 from the backend means "paid tier required". We
+  // don't treat that as a generic failure — we record a sentinel so
+  // the detail-page panel can render an inline upgrade card instead of
+  // the "couldn't load" copy. featureBonus stays null so the score
+  // formula falls back to the no-bonus branch (free users see honest
+  // numbers, not a fake bonus).
+  if (artist.id) {
+    try {
+      var fr = await proxyGet('/api/artists/' + encodeURIComponent(artist.id) + '/features');
+      // { kind, artistId, summary: {...}, tracks: [...] }
+      artist.features = (fr && typeof fr === 'object') ? fr : null;
+      var bonus = artist.features && artist.features.summary && artist.features.summary.featureBonus;
+      artist.featureBonus = (bonus == null) ? null : Number(bonus);
+    } catch (e) {
+      if (e && e.status === 402) {
+        artist.features    = { gated: true, gateInfo: e.body || {} };
+        artist.featureBonus = null;
+      } else {
+        artist.features    = null;
+        artist.featureBonus = null;
+      }
+    }
   }
 }
 
@@ -1819,16 +3005,36 @@ function renderArtistDetail(a) {
 
   // Score breakdown — mirrors the formula in refreshAll(), exposed here
   // so users can see exactly how a ranking got its number.
-  var subTerm    = Math.round(Math.log10((a.subCount       || 0) + 1) * 10 * 10) / 10;
-  var viewTerm   = Math.round(Math.log10((a.views          || 0) + 1) *  5 * 10) / 10;
-  var recentTerm = Math.round(Math.log10((a.recentAvgViews || 0) + 1) *  3 * 10) / 10;
-  var trendBoost = a.trend === 'hot' ? 5 : a.trend === 'up' ? 3 : 0;
+  var subTerm     = Math.round(Math.log10((a.subCount       || 0) + 1) * 10 * 10) / 10;
+  var viewTerm    = Math.round(Math.log10((a.views          || 0) + 1) *  5 * 10) / 10;
+  var recentTerm  = Math.round(Math.log10((a.recentAvgViews || 0) + 1) *  3 * 10) / 10;
+  var trendBoost  = a.trend === 'hot' ? 5 : a.trend === 'up' ? 3 : 0;
+  var featureBoost = a.featureBonus == null
+    ? 0
+    : Math.round(Math.max(0, Math.min(1, Number(a.featureBonus))) * 5 * 10) / 10;
+  var featureLabel = a.featureBonus == null
+    ? '<div class="bd-row"><span>Audio features &middot; bonus \u00d7 5</span><span style="color:var(--sub);font-weight:normal">no tracks analyzed</span></div>'
+    : '<div class="bd-row"><span>Audio features &middot; bonus \u00d7 5</span><span>'
+        + Number(a.featureBonus).toFixed(2) + ' \u2192 +' + featureBoost + '</span></div>';
   document.getElementById('detailBreakdown').innerHTML =
       '<div class="bd-row"><span>Subscribers &middot; log\u2081\u2080 \u00d7 10</span><span>' + fmtNum(a.subCount || 0) + ' \u2192 +' + subTerm + '</span></div>'
     + '<div class="bd-row"><span>Lifetime views &middot; log\u2081\u2080 \u00d7 5</span><span>' + fmtNum(a.views || 0) + ' \u2192 +' + viewTerm + '</span></div>'
     + '<div class="bd-row"><span>Recent avg views &middot; log\u2081\u2080 \u00d7 3</span><span>' + fmtNum(a.recentAvgViews || 0) + ' \u2192 +' + recentTerm + '</span></div>'
     + '<div class="bd-row"><span>Editorial trend (' + escHtml(a.trend || 'stable') + ')</span><span>+' + trendBoost + '</span></div>'
+    + featureLabel
     + '<div class="bd-row bd-total"><span>Total score</span><span>' + (a.score || 0) + '</span></div>';
+
+  // Audio features panel. Hide it entirely for demo-mode rows (no .id),
+  // since /api/artists/:id/features is UUID-keyed and won't resolve.
+  var featPanel = document.getElementById('detailFeaturesPanel');
+  if (featPanel) {
+    if (!a.id) {
+      featPanel.style.display = 'none';
+    } else {
+      featPanel.style.display = '';
+      renderArtistFeatures(a);
+    }
+  }
 
   // Recent uploads — reuse whatever fetchArtistData() cached.
   var videos = (a.videos || []).slice(0, 10);
@@ -1856,6 +3062,152 @@ function renderArtistDetail(a) {
   }
 
   renderDetailChart(a);
+}
+
+// Render the librosa-derived audio-features panel for the currently
+// open artist. Two paths:
+//   * cached on the artist row (refreshAll already fetched it via
+//     fetchArtistData) → render synchronously
+//   * not yet cached (e.g. first detail-view open before the dashboard
+//     finished refreshing) → fetch /api/artists/:id/features lazily
+// Either way we end up writing into #detailFeatures.
+async function renderArtistFeatures(a) {
+  var box = document.getElementById('detailFeatures');
+  if (!box) { return; }
+  if (!a.id) { box.innerHTML = '<div class="feat-empty">Audio features unavailable in demo mode.</div>'; return; }
+
+  var data = a.features || null;
+  if (!data) {
+    box.innerHTML = '<div class="feat-empty">Loading audio features\u2026</div>';
+    try {
+      data = await proxyGet('/api/artists/' + encodeURIComponent(a.id) + '/features');
+      a.features = data;
+      var b = data && data.summary && data.summary.featureBonus;
+      a.featureBonus = (b == null) ? null : Number(b);
+    } catch (e) {
+      if (e && e.status === 402) {
+        a.features = { gated: true, gateInfo: e.body || {} };
+        a.featureBonus = null;
+        renderFeatureGate(box, a.features.gateInfo);
+        return;
+      }
+      box.innerHTML = '<div class="feat-empty">Couldn\u2019t load audio features.</div>';
+      return;
+    }
+  }
+
+  // Paid-tier gate sentinel (set in fetchArtistData on 402). Render the
+  // inline upgrade card and bail before the summary/track-table code.
+  if (data && data.gated) {
+    renderFeatureGate(box, data.gateInfo || {});
+    return;
+  }
+
+  var summary = (data && data.summary) || {};
+  var tracks  = (data && Array.isArray(data.tracks)) ? data.tracks : [];
+
+  if (!tracks.length) {
+    box.innerHTML =
+        '<div class="feat-empty">No tracks analyzed yet.</div>'
+      + '<div class="feat-empty" style="margin-top:6px">'
+      + 'The Python worker (<code>scripts/extract-features.py</code>) populates this once '
+      + 'the daily enqueue script picks up new uploads.</div>';
+    return;
+  }
+
+  // Summary row — tempo / key / energy / track count.
+  var tempoVal = summary.tempoBpmAvg == null
+    ? '\u2014'
+    : Math.round(summary.tempoBpmAvg) + ' bpm';
+  var tempoSub = (summary.tempoBpmMin != null && summary.tempoBpmMax != null)
+    ? Math.round(summary.tempoBpmMin) + '\u2013' + Math.round(summary.tempoBpmMax) + ' range'
+    : '';
+
+  var dk = summary.dominantKey;
+  var keyVal = dk
+    ? (dk.key + (dk.mode === 'minor' ? 'm' : '')
+       + (dk.camelot ? '<span class="feat-key-pill">' + escHtml(dk.camelot) + '</span>' : ''))
+    : '\u2014';
+  var keySub = dk ? 'dominant across catalog' : '';
+
+  var energyAvg = summary.energyAvg == null ? null : Number(summary.energyAvg);
+  var energyVal = energyAvg == null ? '\u2014' : (Math.round(energyAvg * 100) + '%');
+  var energyMeter = energyAvg == null
+    ? ''
+    : '<div class="feat-energy-meter"><span style="width:'
+        + Math.round(Math.max(0, Math.min(1, energyAvg)) * 100) + '%"></span></div>';
+
+  var bonusVal = summary.featureBonus == null
+    ? '\u2014'
+    : '+' + (Math.round(Number(summary.featureBonus) * 5 * 10) / 10);
+  var bonusSub = summary.featureBonus == null ? '' : 'added to score';
+
+  var summaryHtml =
+      '<div class="feat-summary">'
+    +   '<div class="feat-stat"><div class="fs-lab">Tempo</div><div class="fs-val">' + tempoVal + '</div>'
+    +     (tempoSub ? '<div class="fs-sub">' + tempoSub + '</div>' : '')
+    +   '</div>'
+    +   '<div class="feat-stat"><div class="fs-lab">Key</div><div class="fs-val">' + keyVal + '</div>'
+    +     (keySub ? '<div class="fs-sub">' + keySub + '</div>' : '')
+    +   '</div>'
+    +   '<div class="feat-stat"><div class="fs-lab">Energy</div><div class="fs-val">' + energyVal + '</div>' + energyMeter + '</div>'
+    +   '<div class="feat-stat"><div class="fs-lab">Tracks</div><div class="fs-val">' + summary.trackCount + '</div>'
+    +     '<div class="fs-sub">analyzed</div>'
+    +   '</div>'
+    +   '<div class="feat-stat"><div class="fs-lab">Score bonus</div><div class="fs-val">' + bonusVal + '</div>'
+    +     (bonusSub ? '<div class="fs-sub">' + bonusSub + '</div>' : '')
+    +   '</div>'
+    + '</div>';
+
+  // Per-track table — title, tempo, key, energy. Truncated to first 8
+  // for readability; the API returns DESC-by-extracted_at so newest first.
+  var rows = tracks.slice(0, 8).map(function(t) {
+    var ttl = (t.title == null || t.title === '') ? t.videoId : t.title;
+    var tmp = t.tempoBpm == null ? '\u2014' : Math.round(t.tempoBpm) + ' bpm';
+    var key = t.key == null
+      ? '\u2014'
+      : (t.key + (t.mode === 'minor' ? 'm' : '') + (t.camelot ? ' (' + escHtml(t.camelot) + ')' : ''));
+    var en  = t.energy == null ? '\u2014' : (Math.round(Number(t.energy) * 100) + '%');
+    return '<tr>'
+         +   '<td>' + escHtml(ttl) + '</td>'
+         +   '<td class="feat-num">' + tmp + '</td>'
+         +   '<td>' + key + '</td>'
+         +   '<td class="feat-num">' + en + '</td>'
+         + '</tr>';
+  }).join('');
+
+  var tableHtml =
+      '<table class="feat-tracks"><thead><tr>'
+    +   '<th>Title</th><th class="feat-num">Tempo</th><th>Key</th><th class="feat-num">Energy</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table>';
+
+  box.innerHTML = summaryHtml + tableHtml;
+}
+
+// Phase 2d: render the inline "Upgrade to unlock" card in place of the
+// audio-features summary + track table. Called when the backend returns
+// 402 (paid-tier required) for /api/artists/:id/features. The card has
+// the same vertical footprint as the empty-state copy so the layout
+// doesn't jump as the gate flips on/off.
+function renderFeatureGate(box, gateInfo) {
+  if (!box) { return; }
+  // gateInfo is the body of the 402 response: { kind, plan, stripeStatus,
+  // upgrade: { method, path }, message }. Defaults are friendly so a
+  // missing field doesn't blank out the card.
+  var msg = (gateInfo && gateInfo.message)
+    || 'Audio features (tempo, key, energy, score bonus) are part of the paid tier.';
+  box.innerHTML =
+      '<div class="feat-gate">'
+    +   '<div class="fg-title">Upgrade to unlock audio features</div>'
+    +   '<div class="fg-body">' + escHtml(msg) + ' '
+    +     'You\u2019ll be redirected to Stripe to start your subscription, '
+    +     'then bounced right back to this page.'
+    +   '</div>'
+    +   '<div class="fg-actions">'
+    +     '<button type="button" class="btn" data-action="plan-upgrade">Upgrade now</button>'
+    +     '<button type="button" class="btn sec" data-action="signin">Use a different account</button>'
+    +   '</div>'
+    + '</div>';
 }
 
 async function renderDetailChart(a) {
