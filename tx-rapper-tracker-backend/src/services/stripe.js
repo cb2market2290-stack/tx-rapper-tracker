@@ -351,15 +351,33 @@ export async function recordCheckoutSessionComplete(stripeSessionId, payload) {
 
 /**
  * Read the active_user_plan view for a single user. Returns:
- *   { plan: 'paid' | 'free', stripeStatus, currentPeriodEnd, cancelAtPeriodEnd }
+ *   {
+ *     plan: 'paid' | 'free',           // back-compat alias
+ *     planSlug: 'free' | 'pro' | 'premium' | 'paid',
+ *     planRank: 0 | 1 | 2 | 99,        // 99 = unmapped paying sub
+ *     planDisplayName: string,
+ *     stripeStatus, currentPeriodEnd, cancelAtPeriodEnd
+ *   }
  *
  * Hot path on every gated request. The view's underlying join is
  * indexed; for the foreseeable future this is well under a millisecond.
+ *
+ * Phase 2e.A: extended with planSlug + planRank + planDisplayName from
+ * the pricing_tiers join. Old callers comparing .plan === 'paid' still
+ * work — that column is retained as a back-compat alias.
  */
 export async function getPlanForUser(userId) {
-  if (!userId) return { plan: 'free' };
+  if (!userId) {
+    return {
+      plan: 'free',
+      planSlug: 'free',
+      planRank: 0,
+      planDisplayName: 'Free',
+    };
+  }
   const { rows } = await query(
-    `SELECT plan, stripe_status, current_period_end, cancel_at_period_end
+    `SELECT plan, plan_slug, plan_rank, plan_display_name,
+            stripe_status, current_period_end, cancel_at_period_end
        FROM active_user_plan
       WHERE user_id = $1`,
     [userId]
@@ -367,15 +385,78 @@ export async function getPlanForUser(userId) {
   if (rows.length === 0) {
     // User exists but isn't in the view (shouldn't happen — the LEFT
     // JOIN guarantees a row). Treat as free defensively.
-    return { plan: 'free', stripeStatus: 'free' };
+    return {
+      plan: 'free',
+      planSlug: 'free',
+      planRank: 0,
+      planDisplayName: 'Free',
+      stripeStatus: 'free',
+    };
   }
   const r = rows[0];
   return {
     plan: r.plan,
+    planSlug: r.plan_slug,
+    planRank: r.plan_rank,
+    planDisplayName: r.plan_display_name,
     stripeStatus: r.stripe_status,
     currentPeriodEnd: r.current_period_end,
     cancelAtPeriodEnd: r.cancel_at_period_end,
   };
+}
+
+/**
+ * Read all pricing tiers in rank order. Returns a list of:
+ *   { slug, rank, stripePriceId, displayName, monthlyAmountCents, features, purchasable }
+ * `purchasable` is true iff stripe_price_id is non-null AND non-zero
+ * monthly_amount_cents (i.e. an actually purchasable paid tier). Free
+ * tier is always returned but never purchasable.
+ *
+ * Frontend reads this to render the Upgrade card; admin uses it to
+ * verify wiring at a glance.
+ */
+export async function getTiers() {
+  const { rows } = await query(
+    `SELECT slug, rank, stripe_price_id, display_name,
+            monthly_amount_cents, features
+       FROM pricing_tiers
+      ORDER BY rank ASC`
+  );
+  return rows.map((r) => ({
+    slug: r.slug,
+    rank: r.rank,
+    stripePriceId: r.stripe_price_id,
+    displayName: r.display_name,
+    monthlyAmountCents: r.monthly_amount_cents,
+    features: r.features || [],
+    purchasable: Boolean(r.stripe_price_id) && r.rank > 0,
+  }));
+}
+
+/**
+ * Resolve a tier slug → stripe_price_id. Returns null when the slug is
+ * unknown OR the tier has no price wired up yet. Caller decides whether
+ * to 503 / 400 in that case. Tier 'free' is never purchasable and
+ * always returns null.
+ */
+export async function priceIdForTier(slug) {
+  if (!slug || typeof slug !== 'string') return null;
+  if (slug === 'free') return null;
+  const { rows } = await query(
+    `SELECT stripe_price_id FROM pricing_tiers WHERE slug = $1`,
+    [slug]
+  );
+  return rows[0]?.stripe_price_id || null;
+}
+
+/**
+ * Compare two tier ranks. Returns true iff `a` is at least `b`. Useful
+ * for middleware: requirePaid({minTier:'pro'}) compares user's planRank
+ * against the rank of 'pro'. Both sides are integers from the view /
+ * pricing_tiers — pure compare, no I/O.
+ */
+export function rankAtLeast(userRank, minRank) {
+  return Number.isFinite(userRank) && Number.isFinite(minRank) && userRank >= minRank;
 }
 
 /**

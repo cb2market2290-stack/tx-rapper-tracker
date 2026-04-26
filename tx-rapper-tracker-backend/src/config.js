@@ -111,7 +111,18 @@ const EnvSchema = z.object({
   STRIPE_WEBHOOK_SECRET: z.string().default(''),
   // Default price id for the paid tier. Stored here (not hardcoded) so
   // upgrading/A-B-testing prices is an env flip, not a code change.
+  // Phase 2e.A: kept as a back-compat fallback. Prefer STRIPE_PRICE_PRO /
+  // STRIPE_PRICE_PREMIUM below, which are seeded into pricing_tiers via
+  // scripts/seed-pricing-tiers.js so the SQL view can resolve the tier.
   STRIPE_PRICE_ID: z.string().default(''),
+  // --- Phase 2e.A: multi-tier pricing ---
+  // Per-tier Stripe price ids. Empty = tier exists in pricing_tiers but
+  // isn't purchasable yet (Checkout will return 503 for that tier). The
+  // seeder script (scripts/seed-pricing-tiers.js) UPSERTs these into
+  // pricing_tiers.stripe_price_id; the view's JOIN then resolves the
+  // tier slug for any subscription with a matching price_id.
+  STRIPE_PRICE_PRO: z.string().default(''),
+  STRIPE_PRICE_PREMIUM: z.string().default(''),
   // API version pin — Stripe encourages explicit versioning so a future
   // Stripe-side default change can't silently shift our payload shapes.
   STRIPE_API_VERSION: z.string().default('2024-06-20'),
@@ -185,6 +196,12 @@ export const config = Object.freeze({
     secretKey: env.STRIPE_SECRET_KEY || null,
     webhookSecret: env.STRIPE_WEBHOOK_SECRET || null,
     priceId: env.STRIPE_PRICE_ID || null,
+    // Per-tier price ids for Phase 2e.A. Null when not set — the seeder
+    // skips that tier and Checkout for that tier returns 503.
+    tiers: Object.freeze({
+      pro: env.STRIPE_PRICE_PRO || null,
+      premium: env.STRIPE_PRICE_PREMIUM || null,
+    }),
     apiVersion: env.STRIPE_API_VERSION,
     // Convenience flag the rest of the app reads instead of doing a
     // 3-way check across keys.

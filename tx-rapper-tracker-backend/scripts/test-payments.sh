@@ -238,6 +238,113 @@ print(rows[0]['id'] if rows and 'id' in rows[0] else '')
   fi
 fi
 
+# ============================================================================
+# Phase 2e.A additions — multi-tier pricing (Pro + Premium)
+# ============================================================================
+
+# --- 13. anonymous /api/payments/tiers is public + well-formed ---------------
+# /tiers must NOT require auth — the frontend reads it lazily before the
+# user signs in to render the upgrade gate with per-tier buttons.
+hr "13. /api/payments/tiers (public, no auth)"
+rm -f /tmp/tx-pay-tiers.txt
+CODE=$(curl -sS -o "$RESP" -w '%{http_code}' "$BASE/api/payments/tiers")
+code_eq 200 "$CODE" "tiers endpoint reachable anonymously"
+KIND=$(json_get kind)
+[ "$KIND" = "payments.tiers" ] && ok "kind == payments.tiers" || bad "kind was '$KIND'"
+
+# Validate the array shape — every tier MUST have slug + rank + displayName
+# + purchasable, and tiers MUST be sorted by rank ascending. The frontend
+# relies on both invariants; assert them here.
+python3 - <<'PY' "$RESP"
+import json, sys
+d = json.load(open(sys.argv[1]))
+tiers = d.get('tiers') or []
+fail = 0
+def ok(m): print(f'  \033[32mPASS\033[0m {m}')
+def bad(m):
+  global fail
+  fail += 1
+  print(f'  \033[31mFAIL\033[0m {m}')
+if isinstance(tiers, list) and tiers:
+  ok(f'tiers is a non-empty array (len={len(tiers)})')
+else:
+  bad(f'tiers should be a non-empty array, got {type(tiers).__name__}')
+required = ('slug','rank','displayName','purchasable')
+for i,t in enumerate(tiers):
+  miss = [k for k in required if k not in t]
+  if miss: bad(f'tier[{i}] missing keys: {miss}')
+  else: ok(f'tier[{i}] has slug+rank+displayName+purchasable ({t["slug"]})')
+ranks = [t.get('rank') for t in tiers]
+if ranks == sorted(ranks): ok(f'tiers sorted by rank ASC: {ranks}')
+else: bad(f'tiers NOT sorted by rank: {ranks}')
+slugs = [t.get('slug') for t in tiers]
+for needed in ('free','pro','premium'):
+  if needed in slugs: ok(f'tiers includes "{needed}" row')
+  else: bad(f'tiers missing "{needed}" row (did migration 012 run?)')
+sys.exit(1 if fail else 0)
+PY
+if [ "$?" = "0" ]; then PASS=$((PASS+1)); else FAIL=$((FAIL+1)); fi
+
+# --- 14. /checkout with bogus tier slug returns 400 ---------------------
+# Phase 2e.A added body.tier as the preferred way to start checkout. An
+# unknown slug must 400 with kind=tier_invalid, not 500.
+hr "14. /checkout {tier:'bogus'} -> 400 tier_invalid"
+if [ "$ENABLED" = "True" ] || [ "$ENABLED" = "true" ]; then
+  CODE=$(curl -sS -o "$RESP" -w '%{http_code}' -b "$JAR" \
+    -X POST -H 'Content-Type: application/json' \
+    -d '{"tier":"bogus"}' "$BASE/api/payments/checkout")
+  code_eq 400 "$CODE" "checkout rejects unknown tier"
+  ERR=$(json_get error)
+  case "$ERR" in
+    tier_invalid|tier_not_purchasable) ok "error == $ERR" ;;
+    *) bad "error was '$ERR' (expected tier_invalid or tier_not_purchasable)" ;;
+  esac
+else
+  ok "Stripe disabled — skipping live tier-validation test (would 503 first)"
+fi
+
+# --- 15. /checkout {tier:'free'} should never start a session -----------
+# 'free' has rank 0 by design; trying to "buy" it is a UX bug.
+hr "15. /checkout {tier:'free'} rejected"
+if [ "$ENABLED" = "True" ] || [ "$ENABLED" = "true" ]; then
+  CODE=$(curl -sS -o "$RESP" -w '%{http_code}' -b "$JAR" \
+    -X POST -H 'Content-Type: application/json' \
+    -d '{"tier":"free"}' "$BASE/api/payments/checkout")
+  case "$CODE" in
+    400|409) ok "free tier rejected (HTTP $CODE)" ;;
+    *) bad "free tier was NOT rejected (HTTP $CODE)" ;;
+  esac
+else
+  ok "Stripe disabled — skipping (would 503 first)"
+fi
+
+# --- 16. /plan response includes the new planSlug/planRank fields ------
+# Old clients still read .plan ('free'|'paid'); new clients read planSlug.
+hr "16. /plan includes planSlug + planRank"
+CODE=$(curl -sS -o "$RESP" -w '%{http_code}' -b "$JAR" "$BASE/api/payments/plan")
+code_eq 200 "$CODE" "plan endpoint reachable"
+SLUG=$(json_get planSlug)
+[ "$SLUG" = "free" ] && ok "planSlug == free for new user" || bad "planSlug was '$SLUG'"
+RANK=$(json_get planRank)
+[ "$RANK" = "0" ] && ok "planRank == 0 for free user" || bad "planRank was '$RANK'"
+DISP=$(json_get planDisplayName)
+[ -n "$DISP" ] && ok "planDisplayName populated (= $DISP)" || bad "planDisplayName missing"
+
+# --- 17. 402 from features endpoint includes new tier fields -----------
+# After 2e.A the 402 body must surface planSlug/planRank/planDisplayName +
+# minTier so the frontend can preselect a button.
+hr "17. 402 body carries planSlug/planRank/planDisplayName"
+if [ -n "${ARTIST_ID:-}" ]; then
+  curl -sS -o "$RESP" -w '%{http_code}' -b "$JAR" \
+    "$BASE/api/artists/$ARTIST_ID/features" >/dev/null
+  SLUG=$(json_get planSlug)
+  [ "$SLUG" = "free" ] && ok "402 reports planSlug == free" || bad "planSlug was '$SLUG'"
+  DISP=$(json_get planDisplayName)
+  [ -n "$DISP" ] && ok "402 reports planDisplayName (= $DISP)" || bad "planDisplayName missing"
+else
+  ok "no artist id — skipping 402 tier-shape test"
+fi
+
 # --- summary -------------------------------------------------------------
 hr "Summary"
 echo "Pass: $PASS  Fail: $FAIL"

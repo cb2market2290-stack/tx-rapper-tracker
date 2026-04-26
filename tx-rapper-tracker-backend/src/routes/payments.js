@@ -44,6 +44,8 @@ import {
   createCheckoutSession,
   createCustomerPortalSession,
   getPlanForUser,
+  getTiers,
+  priceIdForTier,
   linkCustomer,
 } from '../services/stripe.js';
 
@@ -84,12 +86,17 @@ export function buildRouter() {
   // Returns the current paid/free tier for the signed-in user. The
   // frontend uses this to render the "Upgrade" CTA + handle 402s.
   // Never leaks the Stripe subscription id or price id — coarse only.
+  // Phase 2e.A: surfaces the tier slug + rank + display name so the
+  // plan-pill renders the friendly name (Pro / Premium / Free).
   router.get('/plan', requireUser(), async (req, res, next) => {
     try {
       const plan = await getPlanForUser(req.user.id);
       res.json({
         kind: 'payments.plan',
-        plan: plan.plan,                                  // 'paid' | 'free'
+        plan: plan.plan,                                  // 'paid' | 'free' (back-compat)
+        planSlug: plan.planSlug || 'free',                // 'free' | 'pro' | 'premium' | 'paid'
+        planRank: plan.planRank ?? 0,
+        planDisplayName: plan.planDisplayName || 'Free',
         stripeStatus: plan.stripeStatus || 'free',
         currentPeriodEnd: plan.currentPeriodEnd || null,
         cancelAtPeriodEnd: plan.cancelAtPeriodEnd || false,
@@ -99,12 +106,33 @@ export function buildRouter() {
     }
   });
 
+  // --- GET /api/payments/tiers ------------------------------------------
+  // Public list of pricing tiers — slug, display name, monthly amount,
+  // bullet-feature list, whether purchasable. Used by the frontend
+  // Upgrade card and by the admin pricing-wiring widget. Does NOT
+  // require auth: showing the public pricing ladder before the user
+  // signs in is the whole point of marketing pages.
+  router.get('/tiers', async (_req, res, next) => {
+    try {
+      const tiers = await getTiers();
+      res.json({ kind: 'payments.tiers', tiers });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   // --- POST /api/payments/checkout --------------------------------------
   // Creates a Stripe Checkout Session for the signed-in user and returns
   // the hosted URL the frontend should redirect to. Body shape (all
-  // optional except priceId override):
-  //   { priceId?, successUrl?, cancelUrl? }
-  // Defaults: priceId = config.stripe.priceId; success/cancel = APP_BASE_URL.
+  // optional):
+  //   { tier?, priceId?, successUrl?, cancelUrl? }
+  //
+  // Phase 2e.A: prefer { tier: 'pro' | 'premium' } — we resolve it via
+  // pricing_tiers.stripe_price_id. The legacy { priceId } shape still
+  // works for back-compat (frontend doesn't have to look up the tier
+  // itself). Falls back to config.stripe.priceId only when neither is
+  // provided. 400 'bad_request' when the tier isn't seeded.
+  //
   // 503 when Stripe isn't configured — same posture as the webhook.
   router.post('/checkout', requireUser(), express.json({ limit: '4kb' }), async (req, res, next) => {
     try {
@@ -114,13 +142,38 @@ export function buildRouter() {
           message: 'Stripe not configured (set STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET)',
         });
       }
-      const priceId = (req.body && req.body.priceId) || config.stripe.priceId;
+
+      const body = req.body || {};
+      let priceId = body.priceId || null;
+      let tier = body.tier || null;
+
+      // Resolve tier → price id. If tier is set but unmapped, fail
+      // loudly: 400 with a kind the frontend can map to "this plan
+      // isn't purchasable yet". We do NOT silently fall through to
+      // STRIPE_PRICE_ID — that masks misconfiguration.
+      if (!priceId && tier) {
+        const resolved = await priceIdForTier(tier);
+        if (!resolved) {
+          throw new HttpError(
+            400,
+            'tier_not_purchasable',
+            `tier '${tier}' has no Stripe price id seeded — run scripts/seed-pricing-tiers.js`
+          );
+        }
+        priceId = resolved;
+      }
+
+      if (!priceId) priceId = config.stripe.priceId;
       if (!priceId) {
-        throw new HttpError(400, 'bad_request', 'no priceId — set STRIPE_PRICE_ID or pass priceId in body');
+        throw new HttpError(
+          400,
+          'bad_request',
+          "no priceId — pass {tier:'pro'} or set STRIPE_PRICE_ID"
+        );
       }
       const base = config.appBaseUrl || `http://localhost:${config.port}`;
-      const successUrl = (req.body && req.body.successUrl) || `${base}/?checkout=success`;
-      const cancelUrl  = (req.body && req.body.cancelUrl)  || `${base}/?checkout=cancel`;
+      const successUrl = body.successUrl || `${base}/?checkout=success`;
+      const cancelUrl  = body.cancelUrl  || `${base}/?checkout=cancel`;
 
       const out = await createCheckoutSession({
         userId: req.user.id,
@@ -130,10 +183,16 @@ export function buildRouter() {
         cancelUrl,
       });
       logger.info(
-        { userId: req.user.id, sessionId: out.sessionId },
+        { userId: req.user.id, tier, priceId, sessionId: out.sessionId },
         'stripe checkout session created'
       );
-      res.json({ kind: 'payments.checkout', url: out.url, sessionId: out.sessionId });
+      res.json({
+        kind: 'payments.checkout',
+        url: out.url,
+        sessionId: out.sessionId,
+        tier: tier || null,
+        priceId,
+      });
     } catch (err) {
       next(err);
     }

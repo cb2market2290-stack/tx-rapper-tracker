@@ -33,6 +33,8 @@ const {
   isActiveStatus,
   getStripe,
   getPlanForUser,
+  rankAtLeast,
+  priceIdForTier,
   _resetStripeClientForTests,
 } = await import('../src/services/stripe.js');
 const { config } = await import('../src/config.js');
@@ -308,14 +310,66 @@ test('shapeCheckoutSession surfaces customer_details.email + payment_status', ()
 // branch is pure and lives at the top of the function. Test it so we
 // don't accidentally remove the guard in a refactor.
 
-test('getPlanForUser returns {plan:"free"} for falsy userId without DB call', async () => {
+test('getPlanForUser returns free shape for falsy userId without DB call', async () => {
   // Important: this would crash if the function tried to query — the
   // test env has no DB. So a passing run also implicitly verifies the
   // early-return.
-  const a = await getPlanForUser(null);
-  const b = await getPlanForUser(undefined);
-  const c = await getPlanForUser('');
-  assert.deepEqual(a, { plan: 'free' });
-  assert.deepEqual(b, { plan: 'free' });
-  assert.deepEqual(c, { plan: 'free' });
+  // Phase 2e.A: shape extended with planSlug/planRank/planDisplayName.
+  const expected = {
+    plan: 'free',
+    planSlug: 'free',
+    planRank: 0,
+    planDisplayName: 'Free',
+  };
+  for (const arg of [null, undefined, '', 0, false]) {
+    const out = await getPlanForUser(arg);
+    assert.deepEqual(out, expected, `falsy userId ${JSON.stringify(arg)}`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// rankAtLeast — pure helper, no I/O
+// ---------------------------------------------------------------------------
+
+test('rankAtLeast: equal ranks pass', () => {
+  assert.equal(rankAtLeast(1, 1), true);
+  assert.equal(rankAtLeast(0, 0), true);
+  assert.equal(rankAtLeast(99, 99), true);
+});
+
+test('rankAtLeast: higher passes, lower fails', () => {
+  assert.equal(rankAtLeast(2, 1), true);     // premium >= pro
+  assert.equal(rankAtLeast(99, 1), true);    // unmapped paying >= pro
+  assert.equal(rankAtLeast(1, 2), false);    // pro >= premium → false
+  assert.equal(rankAtLeast(0, 1), false);    // free >= pro → false
+});
+
+test('rankAtLeast: non-finite inputs return false', () => {
+  assert.equal(rankAtLeast(null, 1), false);
+  assert.equal(rankAtLeast(undefined, 1), false);
+  assert.equal(rankAtLeast(NaN, 1), false);
+  assert.equal(rankAtLeast('1', 1), false);  // strict — must be a number
+  assert.equal(rankAtLeast(1, null), false);
+  assert.equal(rankAtLeast(1, NaN), false);
+});
+
+// ---------------------------------------------------------------------------
+// priceIdForTier — offline guard for the falsy-slug + 'free' fast paths
+// ---------------------------------------------------------------------------
+// Like getPlanForUser, the DB-backed lookup needs Postgres, but the
+// guards at the top of the function are pure. Test those here so a
+// refactor that drops them is loud.
+
+test("priceIdForTier returns null for 'free' without DB call", async () => {
+  // 'free' is never purchasable — the function must short-circuit before
+  // querying. A passing run in this no-DB test env proves the guard.
+  const out = await priceIdForTier('free');
+  assert.equal(out, null);
+});
+
+test('priceIdForTier returns null for falsy / non-string slug without DB call', async () => {
+  for (const arg of [null, undefined, '', 0, false, 42, {}]) {
+    const out = await priceIdForTier(arg);
+    assert.equal(out, null, `slug ${JSON.stringify(arg)}`);
+  }
 });
