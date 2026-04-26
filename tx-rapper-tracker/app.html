@@ -1326,10 +1326,13 @@ function renderAuthWidget() {
   renderPlanPill();
 }
 
-// Phase 2d: render the plan tier pill in the header. Hidden when signed
-// out (no plan to show) or when /api/payments/plan hasn't resolved yet.
-// "Free" → click opens Stripe Checkout. "Paid" → click opens the Stripe
-// Customer Portal so a user can update payment / cancel without leaving.
+// Phase 2d (introduced) + Phase 2e.A (multi-tier).
+// Render the plan tier pill in the header. Hidden when signed out or
+// before /api/payments/plan resolves.
+// Free → click opens Stripe Checkout. Paid (any tier) → click opens
+// the Stripe Customer Portal so the user can update payment / cancel
+// without leaving. Pill text is the tier display name (Free / Pro /
+// Premium / Paid for unmapped paying subs).
 function renderPlanPill() {
   var pill = document.getElementById('planPill');
   if (!pill) { return; }
@@ -1342,35 +1345,66 @@ function renderPlanPill() {
   if (userPlan.plan === 'paid') {
     pill.classList.add('paid');
     pill.classList.remove('free');
-    pill.textContent = 'Paid';
+    // Phase 2e.A: prefer the friendly tier name when we have it.
+    pill.textContent = userPlan.planDisplayName || 'Paid';
     pill.title = 'Manage subscription';
   } else {
     pill.classList.add('free');
     pill.classList.remove('paid');
     pill.textContent = 'Upgrade';
-    pill.title = 'Unlock audio features (Stripe Checkout)';
+    pill.title = 'Choose a plan';
   }
 }
 
-// Phase 2d: pull the coarse plan tier so the header pill + the audio
-// gate know which UI to show. Soft-fails — a network blip just leaves
+// Phase 2d (introduced) + Phase 2e.A (multi-tier).
+// Pull the coarse plan tier so the header pill + the audio gate know
+// which UI to show. Soft-fails — a network blip just leaves
 // userPlan = null (pill stays hidden, gate falls back to "couldn't load").
 async function loadPlan() {
   if (!authUser) { userPlan = null; renderPlanPill(); return; }
   try {
     var body = await proxyGet('/api/payments/plan');
-    // Backend returns { kind: 'payments.plan', plan, stripeStatus, ... }
+    // Backend returns { kind: 'payments.plan', plan, planSlug, planRank,
+    //                   planDisplayName, stripeStatus, ... }
     userPlan = body && body.plan
-      ? { plan: body.plan, stripeStatus: body.stripeStatus,
+      ? {
+          plan: body.plan,
+          planSlug: body.planSlug || body.plan,
+          planRank: typeof body.planRank === 'number' ? body.planRank : (body.plan === 'paid' ? 99 : 0),
+          planDisplayName: body.planDisplayName || (body.plan === 'paid' ? 'Paid' : 'Free'),
+          stripeStatus: body.stripeStatus,
           currentPeriodEnd: body.currentPeriodEnd,
-          cancelAtPeriodEnd: body.cancelAtPeriodEnd }
-      : { plan: 'free', stripeStatus: 'free' };
+          cancelAtPeriodEnd: body.cancelAtPeriodEnd
+        }
+      : { plan: 'free', planSlug: 'free', planRank: 0, planDisplayName: 'Free', stripeStatus: 'free' };
   } catch (e) {
     // 401 already redirected to signed-out state; for any other error
     // assume free (safer than silently rendering "Paid" on an error).
-    userPlan = authUser ? { plan: 'free', stripeStatus: 'unknown' } : null;
+    userPlan = authUser
+      ? { plan: 'free', planSlug: 'free', planRank: 0, planDisplayName: 'Free', stripeStatus: 'unknown' }
+      : null;
   }
   renderPlanPill();
+}
+
+// Phase 2e.A: cached pricing tiers (loaded lazily on first feat-gate
+// render). Layout: [{slug, rank, stripePriceId, displayName,
+// monthlyAmountCents, features, purchasable}, …]. Null = not loaded yet.
+var pricingTiers = null;
+async function loadPricingTiers() {
+  if (pricingTiers !== null) return pricingTiers;
+  try {
+    var r = await fetch(PROXY_BASE + '/api/payments/tiers', { credentials: 'include' });
+    if (r.ok) {
+      var body = await r.json();
+      pricingTiers = (body && Array.isArray(body.tiers)) ? body.tiers : [];
+    } else {
+      pricingTiers = [];
+    }
+  } catch (_) {
+    pricingTiers = [];
+  }
+  return pricingTiers;
 }
 
 // Click handler for the header pill. Free → checkout, Paid → portal.
@@ -1394,16 +1428,23 @@ async function onPlanPillClick() {
 }
 
 // POST /api/payments/checkout → { url } → redirect to Stripe Checkout.
-// On the frontend we only carry the priceId if the backend explicitly
-// asked for one (multi-plan future); for now we let the backend pick
-// its configured default. Errors land in a flash banner.
-async function startCheckout(priceId) {
+// Phase 2e.A: arg is either a tier slug ('pro' | 'premium') or a legacy
+// Stripe price id ('price_…'). We sniff the prefix and send the right
+// body shape — the backend accepts either { tier } or { priceId }.
+// Falsy arg → empty body → backend falls back to STRIPE_PRICE_ID.
+async function startCheckout(tierOrPriceId) {
+  var bodyShape = {};
+  if (tierOrPriceId) {
+    bodyShape = (typeof tierOrPriceId === 'string' && tierOrPriceId.indexOf('price_') === 0)
+      ? { priceId: tierOrPriceId }
+      : { tier: tierOrPriceId };
+  }
   try {
     var r = await fetch(PROXY_BASE + '/api/payments/checkout', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(priceId ? { priceId: priceId } : {})
+      body: JSON.stringify(bodyShape)
     });
     var body = await r.json().catch(function() { return {}; });
     if (r.status === 401) {
@@ -3184,18 +3225,60 @@ async function renderArtistFeatures(a) {
   box.innerHTML = summaryHtml + tableHtml;
 }
 
-// Phase 2d: render the inline "Upgrade to unlock" card in place of the
-// audio-features summary + track table. Called when the backend returns
-// 402 (paid-tier required) for /api/artists/:id/features. The card has
-// the same vertical footprint as the empty-state copy so the layout
-// doesn't jump as the gate flips on/off.
+// Phase 2d (introduced) + Phase 2e.A (multi-tier).
+// Render the inline "Upgrade to unlock" card in place of the audio-
+// features summary + track table. Called when the backend returns 402
+// (paid-tier required) for /api/artists/:id/features. The card has
+// roughly the same vertical footprint as the empty-state copy so the
+// layout doesn't jump as the gate flips on/off.
+//
+// gateInfo is the body of the 402 response:
+//   { kind, plan, planSlug, planRank, minTier?, stripeStatus,
+//     upgrade: { method, path }, message }
+//
+// When pricingTiers has been loaded AND there's more than one purchasable
+// tier, we render a button per tier. When there's only one (or none yet,
+// or the public tiers endpoint hasn't responded), we fall back to the
+// single Upgrade button + backend-default price.
 function renderFeatureGate(box, gateInfo) {
   if (!box) { return; }
-  // gateInfo is the body of the 402 response: { kind, plan, stripeStatus,
-  // upgrade: { method, path }, message }. Defaults are friendly so a
-  // missing field doesn't blank out the card.
   var msg = (gateInfo && gateInfo.message)
     || 'Audio features (tempo, key, energy, score bonus) are part of the paid tier.';
+  var minTier = gateInfo && gateInfo.minTier;
+
+  // Build the action row. With multi-tier we show one button per
+  // purchasable tier ≥ minTier (or all purchasable when minTier is unset).
+  // currentRank determines which buttons are "Upgrade to" vs muted "Current".
+  var currentRank = (userPlan && typeof userPlan.planRank === 'number') ? userPlan.planRank : 0;
+  var buttons = '';
+  var purchasable = (pricingTiers || []).filter(function(t) {
+    if (!t.purchasable) return false;
+    if (minTier) {
+      // Only show tiers ≥ minTier
+      var minT = (pricingTiers || []).find(function(x) { return x.slug === minTier; });
+      if (minT && t.rank < minT.rank) return false;
+    }
+    return true;
+  });
+
+  if (purchasable.length >= 2) {
+    purchasable.forEach(function(t) {
+      var price = (typeof t.monthlyAmountCents === 'number')
+        ? '$' + (t.monthlyAmountCents / 100).toFixed(t.monthlyAmountCents % 100 === 0 ? 0 : 2) + '/mo'
+        : '';
+      var label = t.rank > currentRank
+        ? 'Upgrade to ' + escHtml(t.displayName) + (price ? ' \u00b7 ' + price : '')
+        : escHtml(t.displayName) + (price ? ' \u00b7 ' + price : '');
+      buttons +=
+        '<button type="button" class="btn" data-action="plan-upgrade" data-arg="'
+        + escHtml(t.slug) + '">' + label + '</button>';
+    });
+  } else {
+    // Single-tier fallback (Phase 2d posture). Backend uses STRIPE_PRICE_ID.
+    buttons += '<button type="button" class="btn" data-action="plan-upgrade">Upgrade now</button>';
+  }
+  buttons += '<button type="button" class="btn sec" data-action="signin">Use a different account</button>';
+
   box.innerHTML =
       '<div class="feat-gate">'
     +   '<div class="fg-title">Upgrade to unlock audio features</div>'
@@ -3203,11 +3286,12 @@ function renderFeatureGate(box, gateInfo) {
     +     'You\u2019ll be redirected to Stripe to start your subscription, '
     +     'then bounced right back to this page.'
     +   '</div>'
-    +   '<div class="fg-actions">'
-    +     '<button type="button" class="btn" data-action="plan-upgrade">Upgrade now</button>'
-    +     '<button type="button" class="btn sec" data-action="signin">Use a different account</button>'
-    +   '</div>'
+    +   '<div class="fg-actions">' + buttons + '</div>'
     + '</div>';
+
+  // Lazy-load tiers on first render of the gate; this is a no-op if
+  // already loaded, and the next 402 will see them.
+  if (pricingTiers === null) { loadPricingTiers().then(function() { /* next 402 picks them up */ }); }
 }
 
 async function renderDetailChart(a) {
