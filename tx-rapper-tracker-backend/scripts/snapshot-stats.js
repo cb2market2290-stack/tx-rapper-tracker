@@ -23,6 +23,7 @@ import { logger } from '../src/lib/logger.js';
 import { mailer } from '../src/lib/mailer.js';
 import { config } from '../src/config.js';
 import { refreshBreakoutSignals } from '../src/services/breakout.js';
+import { evaluateAllSavedSearches } from '../src/services/savedsearch-evaluator.js';
 
 // Roster lives in the `artists` table (migration 006) so admins can edit
 // without a deploy. We load the active rows at the start of each run and
@@ -207,6 +208,20 @@ async function main() {
     logger.info('breakout_signals refreshed');
   } catch (err) {
     logger.warn({ err: err.message }, 'breakout_signals refresh failed');
+  }
+
+  // Walk every enabled saved_search after the matview is fresh — this
+  // is what powers the per-user email alerts (Phase 3a.3). Wrapped in
+  // try/catch so an evaluator blowup doesn't tank the snapshot run; the
+  // breadcrumb above is already written. The 24h cooling-off cap inside
+  // the evaluator is what prevents alert spam if the cron fires twice
+  // in the same day.
+  try {
+    const baseUrl = config.appBaseUrl || '';
+    const result = await evaluateAllSavedSearches({ baseUrl });
+    logger.info(result, 'saved-search evaluator complete');
+  } catch (err) {
+    logger.warn({ err: err.message }, 'saved-search evaluator failed');
   }
 
   // Fire off alerts before pruning — we care more about getting the signal
