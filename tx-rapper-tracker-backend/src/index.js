@@ -36,6 +36,7 @@ import twoFactorRoutes from './routes/twofactor.js';
 import webauthnRoutes from './routes/webauthn.js';
 import adminRoutes from './routes/admin.js';
 import insightsRoutes from './routes/insights.js';
+import savedSearchesRoutes from './routes/saved-searches.js';
 import { buildRouter as buildPaymentsRouter } from './routes/payments.js';
 import { closePool } from './db/pool.js';
 
@@ -124,6 +125,12 @@ app.use('/api/stats',   requireUser(), statsRoutes);
 // Roster read path — small, public (to signed-in users) because the main
 // app needs it on every page load to know what to render.
 app.use('/api/artists', requireUser(), artistsRoutes);
+// Saved searches CRUD — Phase 3a.2. All endpoints are owner-scoped and
+// require a session. Tier caps (Free 1 / Pro 5 / Premium ∞) live in
+// services/savedsearches.js, enforced at create-time against
+// active_user_plan. Cap-exceeded returns 403 with kind:'savedsearches.tier_cap'
+// so the frontend can render an upgrade nudge.
+app.use('/api/saved-searches', requireUser(), savedSearchesRoutes);
 
 // --- Frontend static files ------------------------------------------------
 // Serve the two HTML pages from the same origin as the API. Resolves
