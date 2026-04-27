@@ -396,6 +396,75 @@
     padding: 4px 10px; font-size: 0.72rem;
   }
 
+  /* Phase 3a.5 — Alerts panel styles. Reuses .auth-modal.sec-modal for
+     the overlay shell; these classes scope the list / form bits. */
+  .auth-modal .al-summary {
+    color: var(--sub); font-size: 0.78rem; margin: 0 0 10px;
+  }
+  .auth-modal .al-summary .pill {
+    display: inline-block; padding: 2px 8px; margin-left: 6px;
+    border-radius: 999px; border: 1px solid var(--border);
+    font-size: 0.7rem; color: var(--text); background: #0d0d0d;
+  }
+  .auth-modal .muted { color: var(--sub); }
+  .auth-modal .al-list {
+    border: 1px solid var(--border); border-radius: 8px;
+    background: #0d0d0d; margin: 6px 0 0;
+  }
+  .auth-modal .al-list .al-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; border-bottom: 1px solid var(--border);
+    font-size: 0.82rem;
+  }
+  .auth-modal .al-list .al-row:last-child { border-bottom: none; }
+  .auth-modal .al-list .al-row.disabled { opacity: 0.55; }
+  .auth-modal .al-list .al-name { color: var(--text); font-weight: 600; }
+  .auth-modal .al-list .al-rule {
+    color: var(--sub); font-size: 0.72rem; margin-top: 2px;
+  }
+  .auth-modal .al-list .al-grow { flex: 1; min-width: 0; }
+  .auth-modal .al-list .al-row .btn { padding: 4px 10px; font-size: 0.72rem; }
+  /* The row uses flex-wrap so on narrow screens (the modal is ~360px on
+     mobile) the action buttons stack below the rule text instead of
+     overflowing. Name + rule + last-fired share the first line; al-actions
+     pushes to the right with margin-left:auto so it always sits opposite
+     the name when there's room. */
+  .auth-modal .al-list .al-row { flex-wrap: wrap; }
+  .auth-modal .al-list .al-actions {
+    display: flex; gap: 6px; margin-left: auto;
+  }
+  .auth-modal .al-list .al-row .al-name { flex: 0 0 100%; }
+  .auth-modal .al-list .al-row .al-rule { flex: 0 0 100%; }
+  .auth-modal .al-list .al-row .al-grow { flex: 1; }
+  .auth-modal .al-empty {
+    color: var(--sub); font-size: 0.85rem; padding: 14px 4px;
+    text-align: center;
+  }
+  .auth-modal .al-empty.hidden { display: none; }
+  .auth-modal .al-cap-nudge {
+    margin-top: 10px; font-size: 0.75rem; color: var(--sub);
+    text-align: center;
+  }
+  .auth-modal .al-cap-nudge.hidden { display: none; }
+  .auth-modal .al-cap-nudge a {
+    color: var(--accent); cursor: pointer;
+  }
+  .auth-modal .al-form-toggle {
+    display: flex; align-items: center; gap: 8px;
+    color: var(--sub); font-size: 0.78rem;
+    margin-top: 12px;
+  }
+  .auth-modal .al-form-toggle input[type="checkbox"] {
+    width: auto; margin: 0;
+  }
+  .auth-modal select {
+    width: 100%; padding: 8px 10px; margin-bottom: 6px;
+    background: #0d0d0d; color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    font-family: inherit; font-size: 0.85rem;
+  }
+  .auth-modal select:focus { outline: none; border-color: var(--accent); }
+
   /* Flash banner shown after a successful reset redirect back to /. */
   .flash-banner {
     background: var(--card); border: 1px solid var(--up); border-radius: 12px;
@@ -639,6 +708,7 @@
   <div class="auth-widget" id="authWidget">
     <span class="who" id="authWho">&nbsp;</span>
     <button class="btn link hidden" id="btnSecurity" data-action="security-open">Security</button>
+    <button class="btn link hidden" id="btnAlerts"   data-action="alerts-open">Alerts</button>
     <button class="btn link hidden" id="btnSignOut" data-action="signout">Sign out</button>
     <button class="btn sec hidden" id="btnSignIn" data-action="signin">Sign in</button>
     <button class="btn hidden" id="btnSignUp" data-action="signup">Create account</button>
@@ -770,6 +840,86 @@
         <button type="button" class="btn sec" data-action="webauthn-register">Add a security key</button>
         <button type="button" class="btn sec" data-action="security-close">Close</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Phase 3a.5 — Alerts panel. Lists the user's saved_searches with a
+     toggle/edit/delete row each, and a "+ New alert" button that flips
+     the modal into edit-form mode. The form posts to /api/saved-searches
+     (POST for create, PATCH for update) and handles the 403 tier_cap
+     response by surfacing an "Upgrade for more alerts" nudge. -->
+<div class="auth-overlay hidden" id="alertsOverlay" data-action="alerts-overlay-bg">
+  <div class="auth-modal sec-modal">
+    <h2>Alerts</h2>
+    <div class="hint" id="alertsHint">Loading…</div>
+    <div class="err hidden" id="alertsErr"></div>
+    <div class="ok hidden" id="alertsOk"></div>
+
+    <!-- View: list of saved searches -->
+    <div class="hidden" id="alertsViewList">
+      <div class="al-summary" id="alertsSummary">&nbsp;</div>
+      <div class="al-list" id="alertsList"></div>
+      <div class="al-empty hidden" id="alertsEmpty">
+        No alerts yet. Create one to get an email when an artist crosses
+        a threshold you care about.
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button type="button" class="btn"     id="alertsNewBtn" data-action="alerts-new">+ New alert</button>
+        <button type="button" class="btn sec"                  data-action="alerts-close">Close</button>
+      </div>
+      <div class="al-cap-nudge hidden" id="alertsCapNudge">
+        You're at your plan's alert limit. <a data-action="plan-upgrade" data-arg="pro">Upgrade for more alerts &rarr;</a>
+      </div>
+    </div>
+
+    <!-- View: create / edit form -->
+    <div class="hidden" id="alertsViewForm">
+      <form id="alertsForm" onsubmit="return submitAlertForm(event)" autocomplete="off">
+        <input type="hidden" id="alFormId" value="" />
+        <label>Name</label>
+        <input type="text" id="alFormName" maxlength="80" required
+               placeholder="e.g. Megan over 1M views/week" />
+
+        <label>Metric</label>
+        <select id="alFormMetric" required>
+          <option value="view_growth_7d">7-day view growth</option>
+          <option value="pct_growth_7d">7-day percentage growth</option>
+          <option value="acceleration_7d">7-day acceleration</option>
+          <option value="lifetime_views">Lifetime views</option>
+        </select>
+
+        <label>Comparator</label>
+        <select id="alFormComparator" required>
+          <option value=">">above (&gt;)</option>
+          <option value=">=">at or above (&ge;)</option>
+          <option value="<">below (&lt;)</option>
+          <option value="<=">at or below (&le;)</option>
+        </select>
+
+        <label>Threshold</label>
+        <input type="number" id="alFormThreshold" step="any" required
+               placeholder="e.g. 1000000" />
+        <div class="hint" id="alFormThresholdHint">
+          Raw view count for "view growth" / "lifetime views" / "acceleration".
+          Decimal ratio for "percentage growth" — 0.05 = 5%.
+        </div>
+
+        <label>Scope</label>
+        <select id="alFormScope">
+          <option value="">Any artist on your roster</option>
+        </select>
+
+        <label class="al-form-toggle">
+          <input type="checkbox" id="alFormEnabled" checked />
+          Enabled (uncheck to keep the rule but stop emails)
+        </label>
+
+        <div class="row" style="margin-top:14px">
+          <button type="submit" class="btn"      id="alFormSubmit">Save</button>
+          <button type="button" class="btn sec"  data-action="alerts-cancel-edit">Cancel</button>
+        </div>
+      </form>
     </div>
   </div>
 </div>
@@ -1257,6 +1407,15 @@ function wireStaticHandlers() {
         // Phase 3a.1 — movers strip
         case 'movers-sort':       setMoversSort(arg); break;
         case 'mover-open':        focusArtistByName(decodeURIComponent(arg || '')); break;
+        // Phase 3a.5 — saved-searches frontend (alerts modal)
+        case 'alerts-open':         openAlerts(); break;
+        case 'alerts-close':        closeAlerts(); break;
+        case 'alerts-overlay-bg':   if (ev.target === t) { closeAlerts(); } break;
+        case 'alerts-new':          startNewAlert(); break;
+        case 'alerts-edit':         startEditAlert(arg); break;
+        case 'alerts-delete':       deleteAlertRow(arg, t); break;
+        case 'alerts-toggle':       toggleAlertEnabled(arg, t); break;
+        case 'alerts-cancel-edit':  showAlertsView('list'); break;
         case 'noop':              break;
       }
     });
@@ -1372,16 +1531,22 @@ function renderAuthWidget() {
   var btnIn  = document.getElementById('btnSignIn');
   var btnUp  = document.getElementById('btnSignUp');
   var btnSec = document.getElementById('btnSecurity');
+  // Phase 3a.5 — alerts ("Alerts") button mirrors the security button's
+  // signed-in/out lifecycle. Hidden until we know who the user is so we
+  // don't flash a button that disappears the moment /api/auth/me 401s.
+  var btnAlt = document.getElementById('btnAlerts');
   if (authUser) {
     who.innerHTML = 'Signed in as <b>' + escapeHtml(authUser.email) + '</b>';
     btnOut.classList.remove('hidden');
     btnSec.classList.remove('hidden');
+    if (btnAlt) btnAlt.classList.remove('hidden');
     btnIn.classList.add('hidden');
     btnUp.classList.add('hidden');
   } else {
     who.innerHTML = '&nbsp;';
     btnOut.classList.add('hidden');
     btnSec.classList.add('hidden');
+    if (btnAlt) btnAlt.classList.add('hidden');
     btnIn.classList.remove('hidden');
     btnUp.classList.remove('hidden');
   }
@@ -2351,6 +2516,379 @@ async function webauthnDelete(arg, t) {
     renderSecurityState();
   } catch (e) {
     setSecError((e && e.message) ? e.message : 'Could not remove that key.');
+  } finally {
+    if (t) t.disabled = false;
+  }
+}
+
+// ── ALERTS PANEL (Phase 3a.5: saved-searches frontend) ───────────────────
+// One overlay (#alertsOverlay) that flips between two views by id:
+//   #alertsViewList — summary + list of existing rules + "+ New alert"
+//   #alertsViewForm — create/edit form (POST or PATCH)
+// Errors and success bubble up to #alertsErr / #alertsOk regardless of view.
+//
+// Backend contract (Phase 3a.2):
+//   GET    /api/saved-searches              → { rows[], cap, count, atCap, planSlug }
+//   POST   /api/saved-searches              → 201 + {row} OR 403 {kind:'savedsearches.tier_cap'}
+//   PATCH  /api/saved-searches/:id          → 200 OR 400 OR 404
+//   DELETE /api/saved-searches/:id          → 200 OR 404
+//
+// Tier caps come from the GET response and are also enforced server-side;
+// the cap nudge under the list is purely a UX hint pointing at /upgrade.
+
+var alertsState = {
+  rows: [],
+  planSlug: null,
+  cap: null,
+  count: 0,
+  atCap: false,
+  editingId: null,    // null when creating; uuid when editing
+  rosterLoaded: false // we only fetch the scope-options list once per open
+};
+
+function setAlertsError(msg) {
+  var err = document.getElementById('alertsErr');
+  err.textContent = msg || '';
+  err.classList.toggle('hidden', !msg);
+}
+function setAlertsOk(msg) {
+  var ok = document.getElementById('alertsOk');
+  ok.textContent = msg || '';
+  ok.classList.toggle('hidden', !msg);
+}
+function showAlertsView(name) {
+  // name: 'list' | 'form'
+  var list = document.getElementById('alertsViewList');
+  var form = document.getElementById('alertsViewForm');
+  if (name === 'list') {
+    list.classList.remove('hidden');
+    form.classList.add('hidden');
+  } else if (name === 'form') {
+    list.classList.add('hidden');
+    form.classList.remove('hidden');
+  } else {
+    list.classList.add('hidden');
+    form.classList.add('hidden');
+  }
+}
+
+async function openAlerts() {
+  setAlertsError('');
+  setAlertsOk('');
+  document.getElementById('alertsHint').textContent = 'Loading…';
+  showAlertsView(null);
+  document.getElementById('alertsOverlay').classList.remove('hidden');
+
+  await checkSession();
+  if (!authUser) {
+    setAlertsError('You need to be signed in to manage alerts.');
+    document.getElementById('alertsHint').textContent = '';
+    return;
+  }
+
+  // Populate the scope dropdown the first time the modal opens; this
+  // is intentionally non-blocking — the form still works (with just the
+  // "Any artist" option) even if /api/artists 401s.
+  if (!alertsState.rosterLoaded) {
+    fetchArtistsForScope().catch(function() { /* soft-fail */ });
+    alertsState.rosterLoaded = true;
+  }
+
+  await refreshAlertsList();
+}
+
+function closeAlerts() {
+  document.getElementById('alertsOverlay').classList.add('hidden');
+  alertsState.editingId = null;
+  showAlertsView(null);
+}
+
+async function fetchArtistsForScope() {
+  var sel = document.getElementById('alFormScope');
+  if (!sel) return;
+  try {
+    var r = await fetch(PROXY_BASE + '/api/artists', { credentials: 'include' });
+    if (!r.ok) return;
+    var body = await r.json();
+    var rows = (body.rows || []).filter(function(row) { return row && row.id && row.name; });
+    // Replace any prior options past the "Any artist" sentinel.
+    while (sel.options.length > 1) { sel.remove(1); }
+    rows.forEach(function(row) {
+      var opt = document.createElement('option');
+      opt.value = row.id;
+      opt.textContent = row.name;
+      sel.appendChild(opt);
+    });
+  } catch (_) { /* soft-fail */ }
+}
+
+async function refreshAlertsList() {
+  setAlertsError('');
+  try {
+    var body = await proxyGet('/api/saved-searches');
+    alertsState.rows     = body.rows || [];
+    alertsState.planSlug = body.planSlug || null;
+    alertsState.cap      = (typeof body.cap === 'number') ? body.cap : null;
+    alertsState.count    = (typeof body.count === 'number') ? body.count : alertsState.rows.length;
+    alertsState.atCap    = !!body.atCap;
+    document.getElementById('alertsHint').textContent = '';
+    renderAlertsSummary();
+    renderAlertsList();
+    showAlertsView('list');
+  } catch (e) {
+    document.getElementById('alertsHint').textContent = '';
+    var msg = (e && e.message) ? e.message : 'Could not load your alerts.';
+    if (e && e.status === 401) {
+      setAlertsError('You need to be signed in to manage alerts.');
+    } else {
+      setAlertsError(msg);
+    }
+  }
+}
+
+function renderAlertsSummary() {
+  var sum = document.getElementById('alertsSummary');
+  var capNudge = document.getElementById('alertsCapNudge');
+  var newBtn = document.getElementById('alertsNewBtn');
+  var planLabel = (alertsState.planSlug || 'free').replace(/^./, function(c) { return c.toUpperCase(); });
+  var capStr;
+  if (alertsState.cap === null || alertsState.cap === Infinity || alertsState.cap === -1) {
+    capStr = 'unlimited';
+  } else {
+    capStr = String(alertsState.cap);
+  }
+  sum.innerHTML =
+    '<span class="pill">' + escapeHtml(planLabel) + ' plan</span>' +
+    ' <span class="muted">' + alertsState.count + ' / ' + escapeHtml(capStr) + ' alerts</span>';
+  // Cap nudge: only show on Free / Pro at-cap. Premium has no cap so
+  // capNudge stays hidden.
+  if (alertsState.atCap && alertsState.planSlug !== 'premium') {
+    capNudge.classList.remove('hidden');
+    if (newBtn) newBtn.disabled = true;
+  } else {
+    capNudge.classList.add('hidden');
+    if (newBtn) newBtn.disabled = false;
+  }
+}
+
+function humanizeMetric(m) {
+  switch (m) {
+    case 'view_growth_7d':  return '7-day view growth';
+    case 'pct_growth_7d':   return '7-day percentage growth';
+    case 'acceleration_7d': return '7-day acceleration';
+    case 'lifetime_views':  return 'lifetime views';
+    default: return m;
+  }
+}
+function humanizeComparator(c) {
+  switch (c) {
+    case '>':  return '&gt;';
+    case '>=': return '&ge;';
+    case '<':  return '&lt;';
+    case '<=': return '&le;';
+    default: return escapeHtml(c);
+  }
+}
+function formatThresholdForDisplay(metric, threshold) {
+  var n = Number(threshold);
+  if (!isFinite(n)) return escapeHtml(String(threshold));
+  if (metric === 'pct_growth_7d') {
+    // Stored as a decimal ratio; show as a %.
+    return (n * 100).toFixed(2).replace(/\.?0+$/, '') + '%';
+  }
+  // Raw count metrics — compact form for big numbers.
+  if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(2).replace(/\.?0+$/, '') + 'M';
+  if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(1).replace(/\.?0+$/, '') + 'K';
+  return String(n);
+}
+
+function renderAlertsList() {
+  var list = document.getElementById('alertsList');
+  var empty = document.getElementById('alertsEmpty');
+  list.innerHTML = '';
+  if (!alertsState.rows.length) {
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+  alertsState.rows.forEach(function(row) {
+    var ruleHtml = humanizeMetric(row.metric)
+      + ' ' + humanizeComparator(row.comparator) + ' '
+      + formatThresholdForDisplay(row.metric, row.threshold);
+    // The backend returns artistId only — resolve to a name via the
+    // already-loaded roster (artistData) so the row reads naturally.
+    // If the artist was removed from the roster after the search was
+    // saved, fall back to the raw id so the UI still shows something
+    // meaningful instead of "any artist".
+    var artistName = null;
+    if (row.artistId) {
+      var match = (artistData || []).find(function(a) { return a.id === row.artistId; });
+      artistName = match ? match.name : row.artistId.slice(0, 8) + '…';
+    }
+    var scopeHtml = artistName
+      ? ' on <b>' + escapeHtml(artistName) + '</b>'
+      : ' on <b>any artist</b>';
+    var enabled = row.enabled !== false;
+    var lastFired = row.lastAlertedAt
+      ? '<div class="al-grow muted">Last fired: ' + escapeHtml(new Date(row.lastAlertedAt).toLocaleString()) + '</div>'
+      : '<div class="al-grow muted">Never fired</div>';
+    var div = document.createElement('div');
+    div.className = 'al-row' + (enabled ? '' : ' disabled');
+    div.innerHTML =
+      '<div class="al-name">' + escapeHtml(row.name || '(unnamed)') + '</div>' +
+      '<div class="al-rule">' + ruleHtml + scopeHtml + '</div>' +
+      lastFired +
+      '<div class="al-actions">' +
+        '<button type="button" class="btn sec sm" data-action="alerts-toggle" data-arg="' + escapeHtml(row.id) + '">' +
+          (enabled ? 'Disable' : 'Enable') +
+        '</button>' +
+        '<button type="button" class="btn sec sm" data-action="alerts-edit" data-arg="' + escapeHtml(row.id) + '">Edit</button>' +
+        '<button type="button" class="btn sec sm" data-action="alerts-delete" data-arg="' + escapeHtml(row.id) + '">Delete</button>' +
+      '</div>';
+    list.appendChild(div);
+  });
+}
+
+function startNewAlert() {
+  if (alertsState.atCap && alertsState.planSlug !== 'premium') {
+    setAlertsError("You're at your plan's alert limit. Upgrade for more.");
+    return;
+  }
+  setAlertsError('');
+  setAlertsOk('');
+  alertsState.editingId = null;
+  document.getElementById('alFormId').value = '';
+  document.getElementById('alFormName').value = '';
+  document.getElementById('alFormMetric').value = 'view_growth_7d';
+  document.getElementById('alFormComparator').value = '>';
+  document.getElementById('alFormThreshold').value = '';
+  document.getElementById('alFormScope').value = '';
+  document.getElementById('alFormEnabled').checked = true;
+  document.getElementById('alFormSubmit').textContent = 'Create alert';
+  showAlertsView('form');
+}
+
+function startEditAlert(id) {
+  var row = alertsState.rows.find(function(r) { return r.id === id; });
+  if (!row) { setAlertsError('That alert is no longer here.'); return; }
+  setAlertsError('');
+  setAlertsOk('');
+  alertsState.editingId = row.id;
+  document.getElementById('alFormId').value = row.id;
+  document.getElementById('alFormName').value = row.name || '';
+  document.getElementById('alFormMetric').value = row.metric;
+  document.getElementById('alFormComparator').value = row.comparator;
+  // Pct values are stored as ratios; display the raw number to keep the
+  // round-trip clean (the user typed e.g. 0.05; we don't pretty-print here).
+  document.getElementById('alFormThreshold').value = row.threshold;
+  document.getElementById('alFormScope').value = row.artistId || '';
+  document.getElementById('alFormEnabled').checked = row.enabled !== false;
+  document.getElementById('alFormSubmit').textContent = 'Save changes';
+  showAlertsView('form');
+}
+
+async function submitAlertForm(ev) {
+  if (ev) ev.preventDefault();
+  setAlertsError('');
+  setAlertsOk('');
+  var id        = document.getElementById('alFormId').value || null;
+  var name      = document.getElementById('alFormName').value.trim();
+  var metric    = document.getElementById('alFormMetric').value;
+  var comparator= document.getElementById('alFormComparator').value;
+  var thresholdRaw = document.getElementById('alFormThreshold').value;
+  var artistId  = document.getElementById('alFormScope').value || null;
+  var enabled   = document.getElementById('alFormEnabled').checked;
+  var threshold = Number(thresholdRaw);
+  if (!name)                     { setAlertsError('Give your alert a short name.'); return false; }
+  if (!isFinite(threshold))      { setAlertsError('Threshold must be a number.'); return false; }
+  if (metric === 'pct_growth_7d' && Math.abs(threshold) > 50) {
+    setAlertsError('For percentage growth, use a decimal ratio — 0.05 = 5%, not 5.');
+    return false;
+  }
+
+  var btn = document.getElementById('alFormSubmit');
+  btn.disabled = true;
+  try {
+    var path = id ? ('/api/saved-searches/' + encodeURIComponent(id)) : '/api/saved-searches';
+    var method = id ? 'PATCH' : 'POST';
+    var payload = {
+      name: name, metric: metric, comparator: comparator,
+      threshold: threshold, artistId: artistId, enabled: enabled
+    };
+    var r = await fetch(PROXY_BASE + path, {
+      method: method,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    var body = await r.json().catch(function() { return {}; });
+    if (r.status === 403 && body && body.kind === 'savedsearches.tier_cap') {
+      setAlertsError("You're at your plan's alert limit. Upgrade for more.");
+      return false;
+    }
+    if (!r.ok) {
+      var msg = (body && (body.message || body.error)) || ('HTTP ' + r.status);
+      setAlertsError(msg);
+      return false;
+    }
+    setAlertsOk(id ? 'Alert updated.' : 'Alert created.');
+    alertsState.editingId = null;
+    await refreshAlertsList();
+  } catch (e) {
+    setAlertsError((e && e.message) ? e.message : 'Could not save that alert.');
+  } finally {
+    btn.disabled = false;
+  }
+  return false;
+}
+
+async function deleteAlertRow(id, t) {
+  if (!id) return;
+  if (!confirm('Delete this alert? This cannot be undone.')) return;
+  setAlertsError('');
+  setAlertsOk('');
+  if (t) t.disabled = true;
+  try {
+    var r = await fetch(PROXY_BASE + '/api/saved-searches/' + encodeURIComponent(id), {
+      method: 'DELETE',
+      credentials: 'include'
+    });
+    if (!r.ok && r.status !== 404) {
+      var body = await r.json().catch(function() { return {}; });
+      throw new Error((body && (body.message || body.error)) || ('HTTP ' + r.status));
+    }
+    setAlertsOk('Alert deleted.');
+    await refreshAlertsList();
+  } catch (e) {
+    setAlertsError((e && e.message) ? e.message : 'Could not delete that alert.');
+  } finally {
+    if (t) t.disabled = false;
+  }
+}
+
+async function toggleAlertEnabled(id, t) {
+  if (!id) return;
+  var row = alertsState.rows.find(function(r) { return r.id === id; });
+  if (!row) return;
+  var nextEnabled = !(row.enabled !== false);
+  setAlertsError('');
+  setAlertsOk('');
+  if (t) t.disabled = true;
+  try {
+    var r = await fetch(PROXY_BASE + '/api/saved-searches/' + encodeURIComponent(id), {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: nextEnabled })
+    });
+    var body = await r.json().catch(function() { return {}; });
+    if (!r.ok) {
+      throw new Error((body && (body.message || body.error)) || ('HTTP ' + r.status));
+    }
+    setAlertsOk(nextEnabled ? 'Alert enabled.' : 'Alert disabled.');
+    await refreshAlertsList();
+  } catch (e) {
+    setAlertsError((e && e.message) ? e.message : 'Could not toggle that alert.');
   } finally {
     if (t) t.disabled = false;
   }
