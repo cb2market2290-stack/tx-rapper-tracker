@@ -22,6 +22,7 @@ import { query, closePool } from '../src/db/pool.js';
 import { logger } from '../src/lib/logger.js';
 import { mailer } from '../src/lib/mailer.js';
 import { config } from '../src/config.js';
+import { refreshBreakoutSignals } from '../src/services/breakout.js';
 
 // Roster lives in the `artists` table (migration 006) so admins can edit
 // without a deploy. We load the active rows at the start of each run and
@@ -193,6 +194,20 @@ async function main() {
     rowsUpserted: ok,
     errorMsg,
   });
+
+  // Refresh the breakout_signals matview AFTER the upserts have landed —
+  // otherwise the dashboard "movers" strip still serves yesterday's deltas
+  // for the rest of the day. CONCURRENTLY (via the unique index from
+  // migration 013) keeps the API path serving stale-but-consistent data
+  // during the rebuild instead of blanking out. Wrapped in try/catch
+  // because a refresh failure shouldn't tank the snapshot run — the
+  // breadcrumb above is already written.
+  try {
+    await refreshBreakoutSignals();
+    logger.info('breakout_signals refreshed');
+  } catch (err) {
+    logger.warn({ err: err.message }, 'breakout_signals refresh failed');
+  }
 
   // Fire off alerts before pruning — we care more about getting the signal
   // out than about keeping the table tidy if the process were to crash.

@@ -163,6 +163,49 @@
   .metric-card .m-val   { font-size: 1.6rem; font-weight: 800; color: var(--text); }
   .metric-card .m-sub   { font-size: 0.72rem; color: var(--sub); margin-top: 2px; }
 
+  /* ── Phase 3a.1: Movers strip ────────────────────────────────────────────
+     A horizontal scroll-row of breakout signals on the dashboard. Designed
+     to stay visible above the fold so it's the first thing a returning
+     user sees, and to render even when signed-out (the endpoint is the
+     public funnel hook). Sort tabs flip the underlying API sortBy. */
+  .movers-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; margin-bottom: 10px;
+  }
+  .movers-tabs {
+    display: flex; gap: 4px; flex-wrap: wrap;
+  }
+  .movers-tab {
+    background: transparent; border: 1px solid var(--border); color: var(--sub);
+    font-size: 0.7rem; font-weight: 600; padding: 4px 10px; border-radius: 16px;
+    cursor: pointer; transition: border-color 0.15s, color 0.15s;
+  }
+  .movers-tab:hover { border-color: var(--accent); color: var(--text); }
+  .movers-tab.active { border-color: var(--accent); color: var(--accent); }
+  .movers-strip {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 10px; margin-bottom: 32px;
+  }
+  .mover-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; cursor: pointer; transition: border-color 0.15s, transform 0.1s;
+    position: relative;
+  }
+  .mover-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .mover-rank {
+    position: absolute; top: 8px; right: 10px;
+    font-size: 0.65rem; font-weight: 800; color: var(--border);
+  }
+  .mover-name { font-weight: 700; font-size: 0.88rem; margin-bottom: 4px; padding-right: 18px; }
+  .mover-delta { font-size: 1.1rem; font-weight: 800; color: var(--up); }
+  .mover-delta.flat { color: var(--sub); }
+  .mover-delta.down { color: var(--accent2); }
+  .mover-sub { font-size: 0.7rem; color: var(--sub); margin-top: 2px; }
+  .movers-empty {
+    background: var(--card); border: 1px dashed var(--border); border-radius: 10px;
+    padding: 14px 16px; font-size: 0.78rem; color: var(--sub); margin-bottom: 32px;
+  }
+
   .feed-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 32px; }
   .feed-item {
     background: var(--card); border: 1px solid var(--border); border-radius: 10px;
@@ -784,6 +827,22 @@
     <span id="statusText">Fetching data from YouTube and Google Trends...</span>
   </div>
 
+  <!-- Phase 3a.1 — Movers this week. Anonymous-OK; powered by
+       /api/insights/breakout. Hidden until loadMovers() resolves so we
+       don't render a flicker if the matview is empty. -->
+  <div class="section-title">Movers this week</div>
+  <div class="movers-row">
+    <div class="movers-tabs" id="moversTabs">
+      <button class="movers-tab active" data-action="movers-sort" data-arg="growth">By growth</button>
+      <button class="movers-tab"        data-action="movers-sort" data-arg="percentage">By %</button>
+      <button class="movers-tab"        data-action="movers-sort" data-arg="acceleration">By acceleration</button>
+    </div>
+  </div>
+  <div class="movers-strip" id="moversStrip"></div>
+  <div class="movers-empty hidden" id="moversEmpty">
+    Not enough snapshot history yet — the movers strip lights up after a few days of daily snapshots.
+  </div>
+
   <div class="metrics-row">
     <div class="metric-card">
       <div class="m-label">Artists Tracked</div>
@@ -1195,6 +1254,9 @@ function wireStaticHandlers() {
         case 'plan-pill':         onPlanPillClick(); break;
         case 'plan-upgrade':      startCheckout(arg || null); break;
         case 'plan-portal':       openCustomerPortal(); break;
+        // Phase 3a.1 — movers strip
+        case 'movers-sort':       setMoversSort(arg); break;
+        case 'mover-open':        focusArtistByName(decodeURIComponent(arg || '')); break;
         case 'noop':              break;
       }
     });
@@ -2442,6 +2504,10 @@ async function refreshAll() {
   // gate the rest of the render so we don't await it.
   refreshFreshnessBadge();
 
+  // Phase 3a.1 — Movers strip. Same fire-and-forget pattern; the strip
+  // hides itself if the matview is empty or the endpoint errors.
+  loadMovers();
+
   // If a drill-down view is currently up, re-render it so the freshly
   // fetched stats + recent-videos replace any placeholders.
   if (document.body.classList.contains('detail-active')
@@ -2487,6 +2553,122 @@ async function refreshFreshnessBadge() {
     el.classList.add('hidden');
   }
 }
+
+// ── MOVERS STRIP (Phase 3a.1) ────────────────────────────────────────────
+// Public funnel hook — /api/insights/breakout is intentionally anonymous-OK
+// so the dashboard renders content for landing-page visitors. The endpoint
+// reads the breakout_signals matview (refreshed by the snapshot cron), so
+// load is bounded even unauthenticated.
+//
+// Sort modes (mirror VALID_SORTS in services/breakout.js):
+//   'growth'        — raw 7-day view delta (default; rewards big artists)
+//   'percentage'    — pct delta (rewards small-but-spiking artists)
+//   'acceleration'  — week-over-week change in raw delta
+var moversSortBy = 'growth';
+
+function fmtCompactInt(n) {
+  if (n == null || !isFinite(n)) { return '—'; }
+  var v = Number(n);
+  var s = v < 0 ? '-' : '';
+  v = Math.abs(v);
+  if (v >= 1e9) { return s + (v / 1e9).toFixed(v >= 1e10 ? 0 : 1) + 'B'; }
+  if (v >= 1e6) { return s + (v / 1e6).toFixed(v >= 1e7 ? 0 : 1) + 'M'; }
+  if (v >= 1e3) { return s + (v / 1e3).toFixed(v >= 1e4 ? 0 : 1) + 'K'; }
+  return s + Math.round(v);
+}
+function fmtPct(p) {
+  if (p == null || !isFinite(p)) { return '—'; }
+  var v = Number(p) * 100;
+  var sign = v > 0 ? '+' : '';
+  // 1 decimal up to 99.9, integer above.
+  return sign + (Math.abs(v) < 100 ? v.toFixed(1) : Math.round(v)) + '%';
+}
+
+async function loadMovers() {
+  var strip = document.getElementById('moversStrip');
+  var empty = document.getElementById('moversEmpty');
+  if (!strip) { return; }
+
+  // Don't bother hitting the network when we already know the backend is
+  // dark — the demo banner is already telling the user.
+  if (!backendOk) {
+    strip.innerHTML = '';
+    if (empty) { empty.classList.add('hidden'); }
+    return;
+  }
+
+  try {
+    // proxyGet handles JSON parse + 4xx-with-body throw; this endpoint is
+    // anonymous-OK so we don't need authUser.
+    var r = await proxyGet('/api/insights/breakout?limit=5&sortBy=' + encodeURIComponent(moversSortBy));
+    var rows = (r && r.rows) || [];
+    if (rows.length === 0) {
+      strip.innerHTML = '';
+      if (empty) { empty.classList.remove('hidden'); }
+      return;
+    }
+    if (empty) { empty.classList.add('hidden'); }
+
+    var html = rows.map(function(row, i) {
+      var name = row.artistName || '';
+      // Pick which delta to headline based on the active sort. The non-headline
+      // delta becomes the sub-line so users can see both at a glance.
+      var primary, primaryClass, sub;
+      if (moversSortBy === 'percentage') {
+        primary = fmtPct(row.pctGrowth7d);
+        primaryClass = (row.pctGrowth7d || 0) > 0 ? '' : ((row.pctGrowth7d || 0) < 0 ? 'down' : 'flat');
+        sub = '+' + fmtCompactInt(row.viewGrowth7d) + ' views (7d)';
+      } else if (moversSortBy === 'acceleration') {
+        primary = (row.acceleration7d > 0 ? '+' : '') + fmtCompactInt(row.acceleration7d);
+        primaryClass = (row.acceleration7d || 0) > 0 ? '' : ((row.acceleration7d || 0) < 0 ? 'down' : 'flat');
+        sub = '+' + fmtCompactInt(row.viewGrowth7d) + ' views (7d)';
+      } else {
+        primary = '+' + fmtCompactInt(row.viewGrowth7d);
+        primaryClass = (row.viewGrowth7d || 0) > 0 ? '' : 'flat';
+        sub = fmtPct(row.pctGrowth7d) + ' (7d)';
+      }
+      // data-action="mover-open" + data-arg=name → dispatcher routes to focusArtistByName
+      return ''
+        + '<div class="mover-card" data-action="mover-open" data-arg="' + encodeURIComponent(name) + '">'
+        +   '<div class="mover-rank">#' + (i + 1) + '</div>'
+        +   '<div class="mover-name">' + escapeHtml(name) + '</div>'
+        +   '<div class="mover-delta ' + primaryClass + '">' + primary + '</div>'
+        +   '<div class="mover-sub">' + sub + '</div>'
+        + '</div>';
+    }).join('');
+    strip.innerHTML = html;
+  } catch (_e) {
+    // Don't tank the dashboard if the matview-backed endpoint errors —
+    // the rest of the page is still useful. Quietly hide the strip.
+    strip.innerHTML = '';
+    if (empty) { empty.classList.add('hidden'); }
+  }
+}
+
+// Tab click → reload with the new sort. The active class is moved on the
+// dispatcher side so the highlight matches exactly what we asked for.
+function setMoversSort(sortBy) {
+  if (sortBy !== 'growth' && sortBy !== 'percentage' && sortBy !== 'acceleration') { return; }
+  moversSortBy = sortBy;
+  var tabs = document.querySelectorAll('#moversTabs .movers-tab');
+  for (var i = 0; i < tabs.length; i++) {
+    var t = tabs[i];
+    t.classList.toggle('active', t.getAttribute('data-arg') === sortBy);
+  }
+  loadMovers();
+}
+
+// Drill into the artist detail view by name. The roster might not contain
+// this artist (movers can include archived rappers if the matview was
+// refreshed before archiving) — in that case we still set the hash and
+// let the routing layer render the "not in roster" state.
+function focusArtistByName(name) {
+  if (!name) { return; }
+  location.hash = '#/artist/' + encodeURIComponent(name);
+}
+
+// escapeHtml is defined further down (used by render paths in fetchArtistData
+// and friends). Hoisted, so the loadMovers() rendering above can use it.
 
 // ── FETCH ARTIST ──────────────────────────────────────────────────────────
 // Pulls THREE stats per artist:

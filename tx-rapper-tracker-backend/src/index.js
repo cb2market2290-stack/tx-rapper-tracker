@@ -35,6 +35,7 @@ import authRoutes from './routes/auth.js';
 import twoFactorRoutes from './routes/twofactor.js';
 import webauthnRoutes from './routes/webauthn.js';
 import adminRoutes from './routes/admin.js';
+import insightsRoutes from './routes/insights.js';
 import { buildRouter as buildPaymentsRouter } from './routes/payments.js';
 import { closePool } from './db/pool.js';
 
@@ -111,6 +112,11 @@ app.use('/api/auth/2fa', twoFactorRoutes);
 app.use('/api/auth/webauthn', webauthnRoutes);
 // Admin mounts its own requireAdmin middleware — requireUser + allow-list.
 app.use('/api/admin', adminRoutes);
+// Insights — anonymous-OK on purpose. The breakout/movers strip is the
+// public funnel hook (per PHASE_3_BRAINSTORM.md, Track A → 3a). Heavy
+// reads are precomputed by migration 013's matview, so cost is bounded
+// even without auth. Rate limiter (already mounted above) still applies.
+app.use('/api/insights', insightsRoutes);
 app.use('/api/youtube', requireUser(), youtubeRoutes);
 // Historical stats read-only endpoints. Data is populated by the daily
 // scripts/snapshot-stats.js job, not by user requests, so this is cheap.
