@@ -111,7 +111,11 @@ SELECT
   -- from the dashboard strip but still lets admins see them.
   (as_of IS NOT NULL
     AND first_snapshot IS NOT NULL
-    AND (as_of - first_snapshot) >= INTERVAL '14 days'
+    -- Both columns are DATE; subtracting two dates yields integer days,
+    -- not an interval, so we compare against the integer literal 14
+    -- rather than INTERVAL '14 days' (which would error with
+    -- "operator does not exist: integer >= interval").
+    AND (as_of - first_snapshot) >= 14
   ) AS has_full_window,
   now() AS computed_at
 FROM points;

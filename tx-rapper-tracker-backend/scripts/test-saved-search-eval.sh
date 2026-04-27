@@ -124,7 +124,7 @@ ok "saved-search id = $SS_ID"
 # has nothing to match against and the rest of the test is moot. We
 # inspect via a tiny Node bridge so we don't need a psql client in PATH.
 hr "3. preflight: matview row count"
-node --input-type=module -e "
+LOG_LEVEL=silent node --input-type=module -e "
 import { query, closePool } from './src/db/pool.js';
 const r = await query('SELECT COUNT(*)::int AS n FROM breakout_signals');
 console.log(JSON.stringify({ n: r.rows[0].n }));
@@ -144,8 +144,12 @@ if [ "$MV_N" -eq 0 ]; then
 fi
 
 # --- 4. invoke evaluator (first run, expect fired ≥ 1) --------------------
+# We silence pino with LOG_LEVEL=silent so the only thing on stdout is the
+# JSON.stringify of the orchestrator return. Without this, pino's structured
+# logs interleave with the result and json.load chokes (it grabs the first
+# log line and reports evaluated=0/fired=0 even when the run succeeded).
 hr "4. invoke evaluator — should fire"
-node --input-type=module -e "
+LOG_LEVEL=silent node --input-type=module -e "
 import { evaluateAllSavedSearches } from './src/services/savedsearch-evaluator.js';
 import { closePool } from './src/db/pool.js';
 const out = await evaluateAllSavedSearches({ baseUrl: '$BASE' });
@@ -164,7 +168,7 @@ echo "  evaluator returned: evaluated=$EVAL fired=$FIRED errors=$ERRS"
 
 # --- 5. last_alerted_at should now be set ---------------------------------
 hr "5. last_alerted_at set after fire"
-node --input-type=module -e "
+LOG_LEVEL=silent node --input-type=module -e "
 import { query, closePool } from './src/db/pool.js';
 const r = await query('SELECT last_alerted_at, last_match_artist_id, last_match_value FROM saved_searches WHERE id = \$1', ['$SS_ID']);
 console.log(JSON.stringify(r.rows[0] || {}));
@@ -197,7 +201,7 @@ fi
 # --- 7. second invocation: cooling-off blocks re-fire ---------------------
 hr "7. second invocation — cooling-off"
 LAA_BEFORE="$LAA"
-node --input-type=module -e "
+LOG_LEVEL=silent node --input-type=module -e "
 import { evaluateAllSavedSearches } from './src/services/savedsearch-evaluator.js';
 import { closePool } from './src/db/pool.js';
 const out = await evaluateAllSavedSearches({ baseUrl: '$BASE' });
@@ -215,7 +219,7 @@ echo "  second evaluator returned: evaluated=$EVAL2 fired=$FIRED2"
 
 # Confirm last_alerted_at didn't move forward (it was filtered out, so
 # the row never went through findMatches/recordAlert again).
-node --input-type=module -e "
+LOG_LEVEL=silent node --input-type=module -e "
 import { query, closePool } from './src/db/pool.js';
 const r = await query('SELECT last_alerted_at FROM saved_searches WHERE id = \$1', ['$SS_ID']);
 console.log(JSON.stringify(r.rows[0] || {}));
