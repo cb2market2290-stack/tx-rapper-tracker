@@ -9,7 +9,7 @@
 //   - Structured JSON logs with a PII scrubber
 //   - Env-var driven config with fail-fast validation
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -21,7 +21,7 @@ import pinoHttp from 'pino-http';
 import { config, redacted } from './config.js';
 import { logger } from './lib/logger.js';
 
-import { securityHeaders } from './middleware/security.js';
+import { cspNonce, securityHeaders } from './middleware/security.js';
 import { corsMiddleware } from './middleware/cors.js';
 import { rateLimitMiddleware } from './middleware/rateLimit.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
@@ -49,6 +49,9 @@ app.set('trust proxy', 1);
 app.disable('x-powered-by');
 
 // --- Platform middleware ---------------------------------------------------
+// Phase 3.5.2 — CSP nonce middleware MUST run before securityHeaders() so
+// res.locals.cspNonce is populated when helmet builds the CSP header.
+app.use(cspNonce());
 app.use(securityHeaders());
 app.use(corsMiddleware());
 app.use(compression());
@@ -162,16 +165,42 @@ if (frontendDir && existsSync(frontendDir)) {
   const appHtml   = path.join(frontendDir, 'app.html');
   const adminHtml = path.join(frontendDir, 'admin.html');
 
+  // Phase 3.5.2 — read both pages once at startup into memory. Per
+  // request we substitute every __CSP_NONCE__ placeholder with the
+  // per-request nonce on res.locals.cspNonce (set by cspNonce()
+  // middleware up top). String.prototype.replaceAll is O(N) over the
+  // page bytes; on a 130KB app.html that's negligible compared to the
+  // 5-50ms page-DB roundtrips users wait for elsewhere.
+  //
+  // We DO read the file once at startup (not per-request) because the
+  // pages are static asset bundles — they only change on deploy, when
+  // the launchd backend is restarted anyway. Cache miss on a hot path
+  // would cost a syscall per request for no reason.
+  const appHtmlSource   = readFileSync(appHtml,   'utf8');
+  const adminHtmlSource = readFileSync(adminHtml, 'utf8');
+
+  function renderHtml(source) {
+    return (req, res) => {
+      const nonce = res.locals.cspNonce || '';
+      // replaceAll keeps things tidy; substitute once per inline block.
+      // The CSP header already authorizes 'nonce-${nonce}', so any
+      // matching nonce= attribute on a <script> or <style> is allowed
+      // and any unmatched (= injected) inline block is blocked.
+      const html = source.replaceAll('__CSP_NONCE__', nonce);
+      res.type('html').send(html);
+    };
+  }
+
   // Explicit routes for the two entry points — no directory listing, no
   // accidental exposure of run_model.py etc.
-  app.get('/',       (_req, res) => res.sendFile(appHtml));
-  app.get('/app',    (_req, res) => res.sendFile(appHtml));
+  app.get('/',       renderHtml(appHtmlSource));
+  app.get('/app',    renderHtml(appHtmlSource));
   // /reset?token=... is the target of password-reset emails. Serve the same
   // SPA — the page reads the token out of the query string on load.
-  app.get('/reset',  (_req, res) => res.sendFile(appHtml));
-  app.get('/admin',  (_req, res) => res.sendFile(adminHtml));
+  app.get('/reset',  renderHtml(appHtmlSource));
+  app.get('/admin',  renderHtml(adminHtmlSource));
 
-  logger.info({ frontendDir }, 'serving frontend');
+  logger.info({ frontendDir }, 'serving frontend with CSP nonces');
 } else {
   logger.info('no frontend dir found; API-only mode');
 }

@@ -133,10 +133,17 @@ function pageShell({
   bodyHtml,
   jsonIslandData,
   appHost,
+  cspNonce,
 }) {
   const safeTitle = escapeHtml(title);
   const safeDesc = escapeHtml(description);
   const safeCanonical = escapeHtml(canonical);
+  // Phase 3.5.2 — nonce attribute on every inline <style> + <script>
+  // so the CSP nonce header authorizes them. Empty string when the
+  // route is rendered outside the request lifecycle (tests); the
+  // browser would block such pages anyway, which is fine — they're
+  // for assertion only.
+  const safeNonce = escapeHtml(cspNonce || '');
   // The JSON island is consumed by /public-pages.js to hydrate the
   // chart. We escape '</' so a malicious payload can't break out of
   // the script tag — defensive even though our payloads are all
@@ -158,7 +165,7 @@ function pageShell({
 <meta property="og:url" content="${safeCanonical}">
 <meta name="twitter:card" content="summary">
 <link rel="canonical" href="${safeCanonical}">
-<style>
+<style nonce="${safeNonce}">
   :root { --bg:#0a0a0a; --bg2:#121212; --text:#e6e6e6; --sub:#999;
           --border:#2a2a2a; --accent:#9d6ee0; }
   * { box-sizing: border-box; }
@@ -213,14 +220,14 @@ ${bodyHtml}
 <footer>
   Public read-only view. <a href="${escapeHtml(appHost)}/?signup=1" style="color:var(--accent)">Sign up</a> to track artists yourself, save searches, and unlock AI-generated artist briefs.
 </footer>
-<script id="public-data" type="application/json">${safeJson}</script>
+<script id="public-data" type="application/json" nonce="${safeNonce}">${safeJson}</script>
 </body>
 </html>`;
 }
 
 // ── render: single artist ──────────────────────────────────────────────
 
-function renderArtistPage({ artist, snapshots, headline, appHost, canonical }) {
+function renderArtistPage({ artist, snapshots, headline, appHost, canonical, cspNonce }) {
   const title = `${artist.name} · TX Rapper Tracker`;
   const descParts = [];
   if (headline && headline.latestViews != null) {
@@ -301,12 +308,13 @@ function renderArtistPage({ artist, snapshots, headline, appHost, canonical }) {
       snapshots,
     },
     appHost,
+    cspNonce,
   });
 }
 
 // ── render: compare ─────────────────────────────────────────────────────
 
-function renderComparePage({ artistsWithHistory, appHost, canonical }) {
+function renderComparePage({ artistsWithHistory, appHost, canonical, cspNonce }) {
   const names = artistsWithHistory.map((a) => a.artist.name).join(', ');
   const title = `Compare: ${names} · TX Rapper Tracker`;
   const description = `Side-by-side YouTube channel stats for ${names}.`;
@@ -371,6 +379,7 @@ function renderComparePage({ artistsWithHistory, appHost, canonical }) {
       })),
     },
     appHost,
+    cspNonce,
   });
 }
 
@@ -395,6 +404,7 @@ router.get('/a/:slug', async (req, res, next) => {
       headline,
       appHost: origin,
       canonical: `${origin}/a/${slug}`,
+      cspNonce: res.locals.cspNonce,
     });
     res.type('html').send(html);
   } catch (err) {
@@ -435,6 +445,7 @@ router.get('/compare/:slugs', async (req, res, next) => {
       artistsWithHistory,
       appHost: origin,
       canonical: `${origin}/compare/${parts.join('+')}`,
+      cspNonce: res.locals.cspNonce,
     });
     res.type('html').send(html);
   } catch (err) {
