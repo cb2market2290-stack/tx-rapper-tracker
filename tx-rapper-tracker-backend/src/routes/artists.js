@@ -27,7 +27,12 @@ const UUID_RE =
 router.get('/', async (_req, res, next) => {
   try {
     const { rows } = await query(
-      `SELECT id, name, sort_order
+      // Phase 3c.4: include `slug` + `is_public` so the frontend can
+      // build `/a/:slug` Share URLs and (in admin views) surface the
+      // visibility flag. Both columns are NOT NULL after migration 016
+      // so they're always populated; older clients that don't read them
+      // simply ignore the extra fields (additive, no breaking change).
+      `SELECT id, name, slug, is_public, sort_order
          FROM artists
         WHERE NOT is_archived
         ORDER BY sort_order ASC, name ASC`

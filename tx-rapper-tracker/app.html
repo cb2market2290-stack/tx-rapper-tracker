@@ -581,6 +581,40 @@
     background: color-mix(in srgb, var(--accent) 18%, var(--card));
     border-color: var(--accent); color: var(--accent);
   }
+  /* Phase 3c.4 — Share button on the detail page header. Mirrors
+     compare-toggle geometry so they sit nicely side by side; slightly
+     muted color so Compare stays the primary affordance. */
+  .detail-share-btn {
+    background: transparent; color: var(--sub);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 14px; font-size: 0.8rem; cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+    white-space: nowrap; margin-left: 8px;
+  }
+  .detail-share-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .detail-share-btn.hidden { display: none; }
+  /* Compare-bar Share button — same posture as cb-go but secondary. */
+  #compareBar .cb-share {
+    background: transparent; color: var(--sub);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 4px 10px; font-size: 0.8rem; cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  #compareBar .cb-share:hover { border-color: var(--accent); color: var(--accent); }
+  /* Toast — fixed bottom-center, fades in/out via the .show class.
+     Bottom offset clears the floating compare bar (which lives at ~24px). */
+  .share-toast {
+    position: fixed; bottom: 92px; left: 50%; transform: translateX(-50%);
+    background: var(--bg); color: var(--text);
+    border: 1px solid var(--accent); border-radius: 8px;
+    padding: 10px 18px; font-size: 0.85rem;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.4);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.18s ease;
+    z-index: 9999;
+  }
+  .share-toast.hidden { display: none; }
+  .share-toast.show { opacity: 1; }
   .detail-title { flex: 1; min-width: 0; }
   .detail-title h2 { font-size: 1.4rem; color: var(--accent); margin-bottom: 4px; word-wrap: break-word; }
   .detail-title .meta { font-size: 0.8rem; color: var(--sub); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -1122,6 +1156,14 @@
       </div>
       <button class="detail-compare-toggle" id="detailCompareToggle" type="button"
               data-action="detail-toggle-compare">+ Add to compare</button>
+      <!-- Phase 3c.4 — Share button. Hidden by default; renderArtistDetail
+           shows it when the artist has a slug (i.e. real DB row, not
+           demo-mode SEED_NAMES). Click copies the public profile URL
+           (/a/<slug>) to clipboard. Shareable in tweets / messages /
+           link previews — backend route serves a public read-only
+           profile via routes/public.js. -->
+      <button class="detail-share-btn hidden" id="detailShareBtn" type="button"
+              data-action="share-artist" title="Copy public profile URL">Share</button>
     </div>
 
     <div class="detail-stats">
@@ -1202,8 +1244,17 @@
   <div id="compareBar" class="hidden">
     <span class="cb-count"><span id="cbCount">0</span> picked</span>
     <button type="button" class="cb-go" data-action="compare-go">Compare &rarr;</button>
+    <!-- Phase 3c.4 — Share compare URL. Builds /compare/<slug1>+<slug2>+...
+         from the slugs in compareSet and copies to clipboard. Hidden when
+         any picked artist lacks a slug (demo mode). -->
+    <button type="button" class="cb-share" data-action="share-compare">Share</button>
     <button type="button" class="cb-clear" data-action="compare-clear">clear</button>
   </div>
+
+  <!-- Phase 3c.4 — toast for clipboard-copy feedback. Single global
+       element re-used by share-artist and share-compare. Auto-hides
+       after 2.2s via setTimeout in showShareToast(). -->
+  <div id="shareToast" class="share-toast hidden" role="status" aria-live="polite"></div>
 
 </div>
 
@@ -1262,8 +1313,13 @@ function buildArtistData(rows) {
   return (rows || []).map(function(r) {
     var name = typeof r === 'string' ? r : r.name;
     var id   = typeof r === 'string' ? null : (r.id || null);
+    // Phase 3c.4 — carry the slug through. /api/artists returns it now;
+    // demo-mode SEED_NAMES rows leave it null and the Share button stays
+    // hidden as a result.
+    var slug = typeof r === 'string' ? null : (r.slug || null);
+    var isPublic = typeof r === 'string' ? null : (r.is_public != null ? !!r.is_public : null);
     return Object.assign(
-      { id: id, name: name },
+      { id: id, name: name, slug: slug, isPublic: isPublic },
       metaFor(name),
       { score: 0, views: 0, subCount: 0, videos: [] }
     );
@@ -1451,6 +1507,10 @@ function wireStaticHandlers() {
         // Phase 3a.1 — movers strip
         case 'movers-sort':       setMoversSort(arg); break;
         case 'mover-open':        focusArtistByName(decodeURIComponent(arg || '')); break;
+        // Phase 3c.4 — Share buttons. share-artist copies the public
+        // /a/<slug> URL; share-compare copies /compare/<slugs>+...
+        case 'share-artist':        shareCurrentArtist(); break;
+        case 'share-compare':       shareCurrentCompare(); break;
         // Phase 3a.5 — saved-searches frontend (alerts modal)
         case 'alerts-open':         openAlerts(); break;
         case 'alerts-close':        closeAlerts(); break;
@@ -3718,6 +3778,123 @@ function renderCompareBar() {
   } else {
     bar.classList.add('hidden');
   }
+
+  // Phase 3c.4 — Share button visibility: only when EVERY picked artist
+  // has a slug. Demo-mode SEED_NAMES rows have slug=null, and a public
+  // /compare URL with a missing slug would 404 (or silently drop a
+  // member); better to hide than ship a broken share.
+  var shareBtn = bar.querySelector('.cb-share');
+  if (shareBtn) {
+    var allHaveSlug = compareSlugsForCurrentSet().length === compareSet.size;
+    shareBtn.classList.toggle('hidden', !allHaveSlug);
+  }
+}
+
+// Phase 3c.4 — resolve compareSet (which holds artist NAMES) to the
+// matching slugs from artistData. Used by the Share button + the
+// share-compare flow. Returns slugs in the iteration order of the Set
+// (insertion order, which matches the compare-bar tooltip order).
+function compareSlugsForCurrentSet() {
+  var slugs = [];
+  compareSet.forEach(function(name) {
+    var a = artistData.find(function(x) { return x.name === name; });
+    if (a && a.slug) { slugs.push(a.slug); }
+  });
+  return slugs;
+}
+
+// ── SHARE BUTTONS (Phase 3c.4) ───────────────────────────────────────────
+// Two entry points dispatched from the body-level [data-action] handler:
+//   shareCurrentArtist   — copies /a/<slug> for the open detail view
+//   shareCurrentCompare  — copies /compare/<slug1>+<slug2>+...
+// Both use copyToClipboard() which prefers the modern async Clipboard API
+// and falls back to the old execCommand path for older browsers /
+// non-HTTPS contexts. Toast is shared.
+
+function copyToClipboard(text) {
+  // Modern path. Promise-resolved on success; rejects on permission or
+  // non-secure-context errors, in which case we drop to the legacy path.
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(text).then(function() { return true; });
+  }
+  // Legacy fallback. Stuff the value in a hidden textarea, select, exec.
+  // Returns a resolved Promise so callers don't have to branch on the
+  // return type.
+  return new Promise(function(resolve) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity  = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      resolve(!!ok);
+    } catch (_) {
+      resolve(false);
+    }
+  });
+}
+
+var shareToastTimer = null;
+
+function showShareToast(msg, isError) {
+  var t = document.getElementById('shareToast');
+  if (!t) { return; }
+  t.textContent = msg;
+  t.classList.remove('hidden');
+  // Two-frame nudge so the .show class triggers the opacity transition
+  // (otherwise display:none → opacity:1 happens in the same frame and
+  // the transition is skipped).
+  requestAnimationFrame(function() {
+    requestAnimationFrame(function() { t.classList.add('show'); });
+  });
+  if (shareToastTimer) { clearTimeout(shareToastTimer); }
+  shareToastTimer = setTimeout(function() {
+    t.classList.remove('show');
+    setTimeout(function() { t.classList.add('hidden'); }, 220);
+  }, isError ? 3000 : 2200);
+}
+
+function shareCurrentArtist() {
+  var btn = document.getElementById('detailShareBtn');
+  if (!btn) { return; }
+  var slug = btn.getAttribute('data-arg') || '';
+  if (!slug) {
+    showShareToast('No public URL available for this artist.', true);
+    return;
+  }
+  var url = location.origin + '/a/' + encodeURIComponent(slug);
+  copyToClipboard(url).then(function(ok) {
+    if (ok) {
+      showShareToast('Public link copied · ' + url);
+    } else {
+      // If clipboard write was blocked (rare), show the URL in the toast
+      // so the user can long-press / select it manually. Better than
+      // silent failure.
+      showShareToast(url, true);
+    }
+  });
+}
+
+function shareCurrentCompare() {
+  var slugs = compareSlugsForCurrentSet();
+  if (slugs.length < 2) {
+    showShareToast('Pick at least 2 artists to share a compare URL.', true);
+    return;
+  }
+  // Slugs are already URL-safe (a-z 0-9 - only); no encodeURIComponent
+  // needed. The +-separator is path-legal in every URL parser we've
+  // tested. Backend route accepts the same shape.
+  var url = location.origin + '/compare/' + slugs.join('+');
+  copyToClipboard(url).then(function(ok) {
+    if (ok) {
+      showShareToast('Compare link copied · ' + slugs.length + ' artists');
+    } else {
+      showShareToast(url, true);
+    }
+  });
 }
 
 function goToCompareView() {
@@ -3807,6 +3984,19 @@ function renderArtistDetail(a) {
   // data-arg is this artist's name, so the dispatcher can route clicks to
   // toggleCompare(name) without a separate global.
   updateDetailCompareButton(a.name);
+
+  // Phase 3c.4 — show the Share button only when the artist has a real
+  // slug (= came from the DB roster, not the SEED_NAMES demo fallback).
+  // Demo-mode rows would link to a public URL that 404s, so hide it.
+  var shareBtn = document.getElementById('detailShareBtn');
+  if (shareBtn) {
+    if (a.slug) {
+      shareBtn.classList.remove('hidden');
+      shareBtn.setAttribute('data-arg', a.slug);
+    } else {
+      shareBtn.classList.add('hidden');
+    }
+  }
 
   // Score breakdown — mirrors the formula in refreshAll(), exposed here
   // so users can see exactly how a ranking got its number.
