@@ -656,6 +656,37 @@
   .bd-total span:first-child { color: var(--accent); font-weight: 600; }
   .bd-total span:last-child  { color: var(--accent); font-size: 1rem; }
 
+  /* Phase 3b — AI artist brief panel. Single-paragraph plain prose.
+     Reuses .feat-gate for the Free / Pro upgrade card so the two
+     Premium surfaces look identical when locked. */
+  .brief-text {
+    font-size: 0.92rem; line-height: 1.55; color: var(--text);
+    white-space: pre-wrap; /* preserve newlines if Claude returns any */
+    margin: 4px 0 10px;
+  }
+  .brief-meta {
+    color: var(--sub); font-size: 0.7rem;
+    display: flex; gap: 10px; flex-wrap: wrap;
+  }
+  .brief-meta .b-dot { color: var(--border); }
+  .brief-degraded {
+    color: #d4a82d; font-size: 0.72rem; margin-top: 6px;
+  }
+  .brief-badge {
+    display: inline-block; vertical-align: middle;
+    padding: 2px 8px; margin-left: 8px;
+    background: rgba(157, 110, 224, 0.15);
+    color: #b489f5; border: 1px solid rgba(157, 110, 224, 0.4);
+    border-radius: 999px; font-size: 0.62rem; font-weight: 500;
+    letter-spacing: 0.5px; text-transform: uppercase;
+  }
+  .brief-empty {
+    color: var(--sub); font-size: 0.85rem; padding: 4px 0;
+  }
+  .brief-error {
+    color: #e06060; font-size: 0.85rem; padding: 4px 0;
+  }
+
   /* Audio features panel — Phase 2c. Renders librosa-derived per-track
      analysis (tempo / key / energy) plus an artist-level summary. The
      summary row drives the small feature bonus that mixes into the
@@ -1121,6 +1152,19 @@
     <div class="detail-panel">
       <h3>Score breakdown</h3>
       <div id="detailBreakdown"></div>
+    </div>
+
+    <!-- Phase 3b — AI artist brief (Premium-only).
+         Same gated-pattern surface as #detailFeaturesPanel: hides for
+         demo-mode rows (no .id) so we don't ping a UUID-keyed endpoint
+         we'd never resolve. The 402 fallback re-uses .feat-gate
+         markup so the upgrade card looks identical across both
+         Premium surfaces. -->
+    <div class="detail-panel" id="detailBriefPanel">
+      <h3>Artist brief <span class="brief-badge">Premium</span></h3>
+      <div id="detailBrief">
+        <div class="feat-empty">Loading brief&hellip;</div>
+      </div>
     </div>
 
     <div class="detail-panel" id="detailFeaturesPanel">
@@ -3785,6 +3829,18 @@ function renderArtistDetail(a) {
     + featureLabel
     + '<div class="bd-row bd-total"><span>Total score</span><span>' + (a.score || 0) + '</span></div>';
 
+  // Phase 3b — AI artist brief panel. Same demo-mode hide rule as
+  // the audio-features panel below; both endpoints are UUID-keyed.
+  var briefPanel = document.getElementById('detailBriefPanel');
+  if (briefPanel) {
+    if (!a.id) {
+      briefPanel.style.display = 'none';
+    } else {
+      briefPanel.style.display = '';
+      renderArtistBrief(a);
+    }
+  }
+
   // Audio features panel. Hide it entirely for demo-mode rows (no .id),
   // since /api/artists/:id/features is UUID-keyed and won't resolve.
   var featPanel = document.getElementById('detailFeaturesPanel');
@@ -4012,6 +4068,134 @@ function renderFeatureGate(box, gateInfo) {
   // Lazy-load tiers on first render of the gate; this is a no-op if
   // already loaded, and the next 402 will see them.
   if (pricingTiers === null) { loadPricingTiers().then(function() { /* next 402 picks them up */ }); }
+}
+
+// ── ARTIST BRIEF (Phase 3b.5) ────────────────────────────────────────────
+// Premium-only Claude-generated paragraph rendered into #detailBrief.
+// Status mapping mirrors what GET /api/artists/:id/brief returns:
+//   200 + brief                 → render the paragraph + meta
+//   200 + briefs.no_data        → render "no snapshots yet" empty state
+//   402                         → renderFeatureGate() (reuse the
+//                                  features upgrade card; the body
+//                                  copy is brief-specific)
+//   503                         → render briefs_unconfigured note
+//   504                         → render "took too long, refresh" note
+//   502                         → render "Claude upstream error" note
+//   anything else               → render "couldn't load" note
+//
+// Brief is cached per (artist, snapshot day, features ts). Re-opening
+// the detail view in the same day hits cacheHit:true and is fast;
+// across days the brief regenerates automatically.
+
+function fmtBriefRelative(d) {
+  if (!d) return '';
+  var t = new Date(d).getTime();
+  if (!isFinite(t)) return '';
+  var sec = Math.max(0, Math.round((Date.now() - t) / 1000));
+  if (sec < 60) return 'just now';
+  if (sec < 3600) return Math.round(sec / 60) + ' min ago';
+  if (sec < 86400) return Math.round(sec / 3600) + ' h ago';
+  var days = Math.round(sec / 86400);
+  return days + ' day' + (days === 1 ? '' : 's') + ' ago';
+}
+
+async function renderArtistBrief(a) {
+  var box = document.getElementById('detailBrief');
+  if (!box) { return; }
+  if (!a.id) {
+    box.innerHTML = '<div class="brief-empty">Artist briefs unavailable in demo mode.</div>';
+    return;
+  }
+  box.innerHTML = '<div class="brief-empty">Loading brief…</div>';
+
+  var data;
+  try {
+    data = await proxyGet('/api/artists/' + encodeURIComponent(a.id) + '/brief');
+  } catch (e) {
+    if (e && e.status === 402) {
+      // Free / Pro user — reuse the features-style upgrade card with
+      // brief-specific copy. The body message is overridden so the user
+      // sees "Unlock AI briefs" not "Unlock audio features".
+      var info = (e.body && typeof e.body === 'object') ? e.body : {};
+      info = Object.assign({}, info, {
+        message:
+          'AI artist briefs are part of the Premium tier — a Claude-generated paragraph that interprets the snapshot + audio data in plain English.',
+      });
+      renderFeatureGate(box, info);
+      return;
+    }
+    if (e && e.status === 503) {
+      box.innerHTML =
+        '<div class="brief-error">'
+        + 'AI briefs aren’t configured on this server. The owner needs to set <code>ANTHROPIC_API_KEY</code> '
+        + 'in the backend env.'
+        + '</div>';
+      return;
+    }
+    if (e && e.status === 504) {
+      box.innerHTML =
+        '<div class="brief-error">'
+        + 'Claude took too long to respond. Refresh the page to try again.'
+        + '</div>';
+      return;
+    }
+    if (e && e.status === 502) {
+      box.innerHTML =
+        '<div class="brief-error">'
+        + 'Claude returned an upstream error. Try again in a moment.'
+        + '</div>';
+      return;
+    }
+    box.innerHTML =
+      '<div class="brief-error">Couldn’t load the brief.</div>';
+    return;
+  }
+
+  // Friendly empty state — the artist has zero snapshots, so there's
+  // nothing for Claude to summarize that wouldn't be hallucination.
+  if (data && data.kind === 'briefs.no_data') {
+    box.innerHTML =
+      '<div class="brief-empty">'
+      + escHtml(data.message || 'No snapshots yet — the brief will appear once data lands.')
+      + '</div>';
+    return;
+  }
+
+  if (!data || !data.brief) {
+    box.innerHTML =
+      '<div class="brief-empty">No brief available.</div>';
+    return;
+  }
+
+  // Happy path — render the paragraph + a small meta line.
+  // Model display: trim the dated suffix so users see "claude-haiku-4-5"
+  // not "claude-haiku-4-5-20251001". Falls back to whatever string we got
+  // if the regex doesn't match (forward-compat with new model id shapes).
+  var modelDisplay = (data.model || '').replace(/-\d{8}$/, '');
+  var when = data.generatedAt
+    ? fmtBriefRelative(data.generatedAt)
+    : '';
+  var cacheTag = data.cacheHit ? 'cached' : 'fresh';
+  var metaParts = [];
+  if (when)         metaParts.push('Generated ' + escHtml(when));
+  if (modelDisplay) metaParts.push(escHtml(modelDisplay));
+  metaParts.push(escHtml(cacheTag));
+  var metaRow = '<div class="brief-meta">'
+    + metaParts.map(function(p, i) {
+        return (i === 0 ? '' : '<span class="b-dot">·</span>') + '<span>' + p + '</span>';
+      }).join('')
+    + '</div>';
+
+  var degraded = data.shapingDegraded
+    ? '<div class="brief-degraded">'
+      + 'Heads-up: this brief didn’t match our usual shape. The next snapshot will regenerate it.'
+      + '</div>'
+    : '';
+
+  box.innerHTML =
+      '<div class="brief-text">' + escHtml(data.brief) + '</div>'
+    + metaRow
+    + degraded;
 }
 
 async function renderDetailChart(a) {
