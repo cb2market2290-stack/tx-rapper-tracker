@@ -126,6 +126,22 @@ const EnvSchema = z.object({
   // API version pin — Stripe encourages explicit versioning so a future
   // Stripe-side default change can't silently shift our payload shapes.
   STRIPE_API_VERSION: z.string().default('2024-06-20'),
+
+  // --- Phase 3b: AI artist briefs (Claude API) ---
+  // Anthropic API key. Empty disables brief generation — cache hits
+  // still serve, but cache misses return 503 with kind:'briefs_unconfigured'.
+  // Same posture as STRIPE_SECRET_KEY: feature flag by env, no code branch.
+  ANTHROPIC_API_KEY: z.string().default(''),
+  // Model id used for brief generation. Locked at v1 to Haiku 4.5; can
+  // be overridden in prod (e.g. to compare Sonnet quality without a
+  // code deploy). The cache key folds in the model so a swap
+  // regenerates cleanly instead of serving Sonnet bytes against a
+  // Haiku fingerprint.
+  ANTHROPIC_BRIEF_MODEL: z.string().default('claude-haiku-4-5-20251001'),
+  // Hard timeout on the Claude call. Past this we fail the route 504;
+  // the user can retry. 25s is comfortably under Cloudflare's 100s
+  // origin timeout and Stripe Checkout's 30s patience.
+  ANTHROPIC_BRIEF_TIMEOUT_MS: z.coerce.number().int().min(1000).default(25_000),
 });
 
 const parsed = EnvSchema.safeParse(process.env);
@@ -207,6 +223,16 @@ export const config = Object.freeze({
     // 3-way check across keys.
     enabled: Boolean(env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET),
   }),
+  briefs: Object.freeze({
+    // null when unset — services/briefs.js treats this as "feature
+    // disabled" the same way services/stripe.js does for STRIPE_SECRET_KEY.
+    apiKey: env.ANTHROPIC_API_KEY || null,
+    model: env.ANTHROPIC_BRIEF_MODEL,
+    timeoutMs: env.ANTHROPIC_BRIEF_TIMEOUT_MS,
+    // Convenience flag — true when we have a key. Cache reads still
+    // succeed when this is false, but cache-miss generation 503s.
+    enabled: Boolean(env.ANTHROPIC_API_KEY),
+  }),
 });
 
 // Safe-to-log view of the config. Redacts anything that looks like a secret.
@@ -235,6 +261,10 @@ export function redacted() {
       ...config.stripe,
       secretKey: config.stripe.secretKey ? '…redacted' : null,
       webhookSecret: config.stripe.webhookSecret ? '…redacted' : null,
+    },
+    briefs: {
+      ...config.briefs,
+      apiKey: config.briefs.apiKey ? '…redacted' : null,
     },
   };
 }
