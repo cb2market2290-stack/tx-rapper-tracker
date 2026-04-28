@@ -78,18 +78,23 @@ must be in the key.
 
 ```
 key_inputs = {
-  artist_id:           uuid,
-  latest_snapshot_id:  bigint,      -- artist_stats_daily.id of the most recent row
-  latest_features_extracted_at: timestamptz,  -- max(track_features.extracted_at) for the artist
-  prompt_version:      text,         -- 'v1' for the prompt below; bump on any change
-  model:               text,         -- e.g. 'claude-haiku-4-5-20251001'
+  artist_id:                    uuid,
+  latest_snapshot_at:           date,         -- MAX(captured_on) from artist_stats_daily
+  latest_features_extracted_at: timestamptz,  -- MAX(extracted_at) from track_features (NULL ok)
+  prompt_version:               text,         -- 'v1' for the prompt below; bump on any change
+  model:                        text,         -- e.g. 'claude-haiku-4-5-20251001'
 }
 fingerprint = sha256(JSON.stringify(key_inputs))
 ```
 
+(Note: `artist_stats_daily` is keyed on `(artist_name, captured_on)`
+with no surrogate id, so we use `MAX(captured_on)` as the snapshot
+freshness signal. Same idea as a row id — it advances exactly once per
+artist per day, and only when the snapshot cron writes new data.)
+
 Why these fields specifically:
 
-- `latest_snapshot_id` is the natural change signal for the snapshots
+- `latest_snapshot_at` is the natural change signal for the snapshots
   input. The cron writes one row per artist per day; when it advances
   the brief is potentially stale.
 - `latest_features_extracted_at` covers the audio-features input
@@ -110,23 +115,11 @@ cache table. Two writes with the same fingerprint are no-ops.
 
 ## Cache table (3b.2)
 
-```sql
--- migrations/015_artist_briefs.sql
-CREATE TABLE artist_briefs (
-  id              BIGSERIAL PRIMARY KEY,
-  artist_id       UUID NOT NULL REFERENCES artists(id) ON DELETE CASCADE,
-  fingerprint     TEXT NOT NULL,           -- sha256 hex of key_inputs
-  prompt_version  TEXT NOT NULL,           -- 'v1' for this commit; bump invalidates
-  model           TEXT NOT NULL,           -- the model id we called
-  brief           TEXT NOT NULL,           -- the paragraph
-  tokens_in       INTEGER,                 -- billing telemetry
-  tokens_out      INTEGER,
-  generated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CONSTRAINT artist_briefs_unique UNIQUE (artist_id, fingerprint)
-);
-
-CREATE INDEX artist_briefs_artist_idx ON artist_briefs (artist_id, generated_at DESC);
-```
+See `migrations/015_artist_briefs.sql` — the migration is the
+canonical schema. Summary: a `BIGSERIAL` PK plus a UNIQUE
+`(artist_id, fingerprint)` constraint that doubles as the cache-key
+lookup index, with the brief, tokens_in/out, prompt_version, and
+model all stored on the row for billing + invalidation queries.
 
 Read path: `SELECT brief, generated_at, model, tokens_in, tokens_out
 FROM artist_briefs WHERE artist_id = $1 AND fingerprint = $2`. Returns
