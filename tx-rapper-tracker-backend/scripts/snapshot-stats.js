@@ -112,6 +112,76 @@ async function alertOnFailure({ status, results, errorMsg, startedAt }) {
   }
 }
 
+// Phase 3.5.3 — generic alert helper. Sends one email per recipient
+// with a tiny try/catch wrapper so an SMTP blip never tanks the
+// snapshot run itself. The DB breadcrumb already captured the work;
+// this is best-effort notification on top.
+async function sendAdminAlert({ subject, lines }) {
+  const recipients = config.adminEmails || [];
+  if (recipients.length === 0) {
+    logger.warn({ subject }, 'admin alert needed but no adminEmails configured');
+    return;
+  }
+  const text = (Array.isArray(lines) ? lines : [String(lines)]).filter(Boolean).join('\n');
+  for (const to of recipients) {
+    try {
+      await mailer.send({ to, subject, text });
+    } catch (err) {
+      logger.warn({ err: err.message, to, subject }, 'admin alert email failed');
+    }
+  }
+}
+
+// Phase 3.5.3 — stale-data detection. After a "successful" run, if the
+// most-recent artist_stats_daily.captured_on is still > 36h old, the
+// run silently failed to write anything new. (Two cron passes both
+// no-op'd; YouTube API returned no usable rows for any artist; etc.)
+// This is exactly the kind of failure mode that hides until the
+// dashboard reads stale data — alert.
+async function alertOnStaleSnapshots(startedAt) {
+  try {
+    const { rows } = await query(
+      `SELECT MAX(captured_on)::text AS day,
+              EXTRACT(EPOCH FROM (now() - MAX(captured_on))) / 3600 AS age_hours
+         FROM artist_stats_daily`
+    );
+    const day = rows[0]?.day || null;
+    const ageHours = rows[0]?.age_hours == null ? null : Number(rows[0].age_hours);
+    if (ageHours == null) {
+      // No snapshots at all yet — first-run state. Don't alert; the
+      // operator wired everything up moments ago and the cron is about
+      // to write the first row.
+      return;
+    }
+    if (ageHours > 36) {
+      logger.warn(
+        { day, ageHours: Math.round(ageHours) },
+        'stale snapshots: most recent captured_on > 36h ago'
+      );
+      await sendAdminAlert({
+        subject: `[snapshot] stale data: latest snapshot is ${Math.round(ageHours)}h old`,
+        lines: [
+          'The daily snapshot job finished successfully BUT the most-recent',
+          `artist_stats_daily row is dated ${day} (${Math.round(ageHours)}h ago).`,
+          '',
+          'This usually means the run wrote zero rows for two cron passes',
+          'in a row — most likely a YouTube API auth issue (quota exhausted,',
+          'key rotated, channel not found) or a roster mismatch (every',
+          'artist in `artists` returned no search results).',
+          '',
+          `Started:  ${startedAt}`,
+          'Check /admin for the snapshot_runs history and the most recent',
+          'per-artist results.',
+        ],
+      });
+    }
+  } catch (err) {
+    // Best-effort. Don't tank the snapshot just because the freshness
+    // check itself blew up.
+    logger.warn({ err: err.message }, 'stale-data check failed');
+  }
+}
+
 // Records the run in snapshot_runs so the admin panel can show "last
 // snapshot: 04:05 OK / 6 artists". Swallows its own errors — if we can't
 // write the breadcrumb we still want the primary script to exit with the
@@ -208,6 +278,23 @@ async function main() {
     logger.info('breakout_signals refreshed');
   } catch (err) {
     logger.warn({ err: err.message }, 'breakout_signals refresh failed');
+    // Phase 3.5.3 — surface to admin email, not just logger.warn. A
+    // matview refresh failure means the dashboard movers strip + every
+    // saved-search alert is reading yesterday's deltas; users won't
+    // notice until they hit the page, by which point the trend window
+    // they care about has shifted.
+    await sendAdminAlert({
+      subject: '[snapshot] breakout_signals matview refresh failed',
+      lines: [
+        'The snapshot itself succeeded but the breakout_signals matview',
+        'refresh threw. Saved-search alerts + the dashboard movers strip',
+        'are now reading stale deltas.',
+        '',
+        `Error: ${err.message}`,
+        '',
+        `Started: ${startedAt}`,
+      ],
+    });
   }
 
   // Walk every enabled saved_search after the matview is fresh — this
@@ -222,11 +309,34 @@ async function main() {
     logger.info(result, 'saved-search evaluator complete');
   } catch (err) {
     logger.warn({ err: err.message }, 'saved-search evaluator failed');
+    // Phase 3.5.3 — admin alert on evaluator failure. Saved-search
+    // alerts are a paid feature; silent failure means a Pro/Premium
+    // user paid for something that didn't fire.
+    await sendAdminAlert({
+      subject: '[snapshot] saved-search evaluator failed',
+      lines: [
+        'The snapshot ran but the saved-search evaluator threw, so',
+        'no per-user alert emails were sent for this cycle.',
+        '',
+        `Error: ${err.message}`,
+        '',
+        `Started: ${startedAt}`,
+      ],
+    });
   }
 
   // Fire off alerts before pruning — we care more about getting the signal
   // out than about keeping the table tidy if the process were to crash.
   await alertOnFailure({ status, results, errorMsg, startedAt });
+
+  // Phase 3.5.3 — even when the run reports 'ok', double-check that
+  // the most-recent captured_on is actually fresh. Two no-op cron
+  // passes in a row (e.g. YouTube quota exhausted across both retries)
+  // would otherwise pass alertOnFailure silently while the data
+  // gradually goes stale.
+  if (status === 'ok') {
+    await alertOnStaleSnapshots(startedAt);
+  }
 
   // Retention after the snapshot, not before — if the INSERT fails we
   // don't want to have already deleted yesterday's row.
