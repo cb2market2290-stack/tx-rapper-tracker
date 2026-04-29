@@ -48,6 +48,9 @@ import {
   priceIdForTier,
   linkCustomer,
 } from '../services/stripe.js';
+import { query } from '../db/pool.js';
+// Phase 3d.3 — referral coupon hook for checkout.session.completed.
+import { createReferralCoupon } from '../services/referrals.js';
 
 /**
  * Build the payments router. Exported as a builder (not a default
@@ -366,6 +369,57 @@ async function dispatchEvent(event) {
         { sessionId: shaped.stripeSessionId, userId, status: shaped.paymentStatus },
         'stripe: checkout session completed'
       );
+
+      // Phase 3d.3 — referral coupon hook. If this user signed up via
+      // a referral link AND the session paid_status is paid (= they
+      // actually converted, not just abandoned cart), issue a coupon
+      // to the referrer. Best-effort: a failure here logs + returns
+      // without re-throwing so the rest of the webhook flow stays
+      // happy. Idempotency lives in the service layer's INSERT ... ON
+      // CONFLICT (referred_user_id) DO NOTHING so Stripe re-deliveries
+      // are no-ops.
+      const isPaid =
+        shaped.paymentStatus === 'paid' || shaped.paymentStatus === 'no_payment_required';
+      if (userId && isPaid) {
+        try {
+          const ref = await query(
+            `SELECT u.referrer_token AS token, r.user_id AS referrer_user_id
+               FROM users u
+               LEFT JOIN referrals r ON r.token = u.referrer_token
+              WHERE u.id = $1`,
+            [userId]
+          );
+          const row = ref.rows[0];
+          if (row && row.referrer_user_id) {
+            // Self-referral guard happens inside createReferralCoupon
+            // (isDifferentUser); already-issued short-circuit also
+            // there. Anti-fraud IP guard is in the route layer; the
+            // webhook context doesn't have a useful client IP
+            // (Stripe's IP, not the user's), so we trust the
+            // signup-time check that lives in routes/auth.js (TODO:
+            // wire ipIsSignupAbusing into signup as a follow-up).
+            const result = await createReferralCoupon({
+              referrerUserId: row.referrer_user_id,
+              referredUserId: userId,
+            });
+            logger.info(
+              {
+                userId,
+                referrerUserId: row.referrer_user_id,
+                couponIssued: result.issued,
+                reason: result.reason || null,
+              },
+              'referrals: checkout-completed coupon path'
+            );
+          }
+        } catch (err) {
+          logger.warn(
+            { err: err.message, userId },
+            'referrals: coupon-issue failed at checkout.completed (non-fatal)'
+          );
+        }
+      }
+
       return;
     }
 

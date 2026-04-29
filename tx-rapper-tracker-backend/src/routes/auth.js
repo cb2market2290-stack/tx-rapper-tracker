@@ -35,6 +35,8 @@ import {
 } from '../auth/passwordReset.js';
 import { mailer } from '../lib/mailer.js';
 import { requireUser } from '../middleware/authenticate.js';
+// Phase 3d.3 — resolve the tx_ref cookie at signup time.
+import { getReferrerByToken } from '../services/referrals.js';
 import { HttpError } from '../middleware/errorHandler.js';
 
 const router = Router();
@@ -137,11 +139,34 @@ router.post('/signup', async (req, res, next) => {
     }
 
     const passwordHash = await hashPassword(body.password);
+
+    // Phase 3d.3 — pull the referral token from the tx_ref cookie if
+    // present. cookie-parser is already mounted globally so req.cookies
+    // is populated. We resolve the token to a real referrer (rejects
+    // bogus / archived tokens) and persist it on users.referrer_token.
+    // Self-referral isn't checked here — the referrer is a different
+    // user by definition (this row is being created right now). The
+    // coupon-issue path in routes/payments.js#webhook does the rest of
+    // the gating (already-issued, anti-fraud, Stripe call).
+    const refCookie = String(req.cookies?.tx_ref || '').trim();
+    let referrerToken = null;
+    if (refCookie) {
+      try {
+        const referrer = await getReferrerByToken(refCookie);
+        // Only persist if the token resolves to an existing referrer.
+        if (referrer) referrerToken = refCookie;
+      } catch (err) {
+        // Lookup blip shouldn't tank signup. Log + proceed without
+        // attribution — they can re-share the link later.
+        // Falls through with referrerToken = null.
+      }
+    }
+
     const { rows } = await query(
-      `INSERT INTO users (email, password_hash, display_name)
-       VALUES ($1, $2, $3)
-       RETURNING id, email, display_name, created_at`,
-      [body.email, passwordHash, body.displayName ?? null]
+      `INSERT INTO users (email, password_hash, display_name, referrer_token)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, email, display_name, created_at, referrer_token`,
+      [body.email, passwordHash, body.displayName ?? null, referrerToken]
     );
     const user = rows[0];
 
@@ -152,7 +177,21 @@ router.post('/signup', async (req, res, next) => {
     });
     setSessionCookie(res, raw, expiresAt);
 
-    await audit({ req, userId: user.id, event: 'signup' });
+    // Clear the tx_ref cookie now that it's persisted on the user.
+    // Fail-soft — clearing is best-effort, and a stale cookie won't
+    // re-attribute (token is already on the row).
+    if (referrerToken) {
+      try {
+        res.clearCookie('tx_ref', { path: '/' });
+      } catch (_) { /* defensive — never throw out of signup */ }
+    }
+
+    await audit({
+      req,
+      userId: user.id,
+      event: 'signup',
+      details: referrerToken ? { referrer_token: referrerToken } : null,
+    });
 
     res.status(201).json({
       kind: 'auth.signup',

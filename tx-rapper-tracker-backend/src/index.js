@@ -39,6 +39,7 @@ import insightsRoutes from './routes/insights.js';
 import savedSearchesRoutes from './routes/saved-searches.js';
 import publicRoutes from './routes/public.js';
 import digestRoutes from './routes/digest.js';
+import referralsRoutes from './routes/referrals.js';
 import { buildRouter as buildPaymentsRouter } from './routes/payments.js';
 import { closePool } from './db/pool.js';
 
@@ -143,6 +144,11 @@ app.use('/api/saved-searches', requireUser(), savedSearchesRoutes);
 // from email, no re-login needed). Mounting the router itself with
 // no auth middleware so each handler can decide.
 app.use('/api/digest', digestRoutes);
+
+// Phase 3d.3 — referral program. /me requires session (gated inside
+// the router); /click is anonymous (used by app.html's onload when
+// ?ref=<token> hits the URL).
+app.use('/api/referrals', referralsRoutes);
 
 // Phase 3c — public, un-gated, server-rendered profile + compare pages,
 // plus /robots.txt and /sitemap.xml. Mounted BEFORE the static-frontend
