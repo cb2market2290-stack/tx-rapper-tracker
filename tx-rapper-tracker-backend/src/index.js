@@ -38,6 +38,7 @@ import adminRoutes from './routes/admin.js';
 import insightsRoutes from './routes/insights.js';
 import savedSearchesRoutes from './routes/saved-searches.js';
 import publicRoutes from './routes/public.js';
+import digestRoutes from './routes/digest.js';
 import { buildRouter as buildPaymentsRouter } from './routes/payments.js';
 import { closePool } from './db/pool.js';
 
@@ -135,6 +136,13 @@ app.use('/api/artists', requireUser(), artistsRoutes);
 // active_user_plan. Cap-exceeded returns 403 with kind:'savedsearches.tier_cap'
 // so the frontend can render an upgrade nudge.
 app.use('/api/saved-searches', requireUser(), savedSearchesRoutes);
+
+// Phase 3d.2 — digest preferences + preview + unsubscribe.
+// /preferences + /preview need a session (gated inside the router).
+// /unsubscribe is anonymous + HMAC-token-gated by design (one-click
+// from email, no re-login needed). Mounting the router itself with
+// no auth middleware so each handler can decide.
+app.use('/api/digest', digestRoutes);
 
 // Phase 3c — public, un-gated, server-rendered profile + compare pages,
 // plus /robots.txt and /sitemap.xml. Mounted BEFORE the static-frontend
