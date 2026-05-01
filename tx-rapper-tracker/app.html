@@ -206,6 +206,16 @@
     padding: 14px 16px; font-size: 0.78rem; color: var(--sub); margin-bottom: 32px;
   }
 
+  /* Phase 3d.3 — onboarding empty-state card on the dashboard. Shown
+     only for signed-in users with zero saved-search activity who have
+     not dismissed the card. Sits above the movers strip. */
+  .onboarding-card {
+    background: linear-gradient(135deg, rgba(157,110,224,0.10), rgba(157,110,224,0.04));
+    border: 1px solid rgba(157,110,224,0.32); border-radius: 10px;
+    padding: 16px 18px; margin-bottom: 18px;
+  }
+  .onboarding-card.hidden { display: none; }
+
   .feed-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 32px; }
   .feed-item {
     background: var(--card); border: 1px solid var(--border); border-radius: 10px;
@@ -774,6 +784,10 @@
     <span class="who" id="authWho">&nbsp;</span>
     <button class="btn link hidden" id="btnSecurity" data-action="security-open">Security</button>
     <button class="btn link hidden" id="btnAlerts"   data-action="alerts-open">Alerts</button>
+    <!-- Phase 3d.2 — digest email preferences -->
+    <button class="btn link hidden" id="btnEmail"    data-action="email-prefs-open">Email</button>
+    <!-- Phase 3d.3 — refer-a-friend -->
+    <button class="btn link hidden" id="btnReferral" data-action="referrals-open">Refer</button>
     <button class="btn link hidden" id="btnSignOut" data-action="signout">Sign out</button>
     <button class="btn sec hidden" id="btnSignIn" data-action="signin">Sign in</button>
     <button class="btn hidden" id="btnSignUp" data-action="signup">Create account</button>
@@ -989,6 +1003,62 @@
   </div>
 </div>
 
+<!-- Phase 3d.2 — Email-preferences modal. Single switch for the weekly
+     digest opt-in. Reuses the existing .auth-overlay / .auth-modal /
+     .sec-modal scaffold. -->
+<div class="auth-overlay hidden" id="emailPrefsOverlay" data-action="email-prefs-overlay-bg">
+  <div class="auth-modal sec-modal">
+    <h2>Email preferences</h2>
+    <div class="hint" id="emailPrefsHint">Loading…</div>
+    <div class="err hidden" id="emailPrefsErr"></div>
+    <div class="ok hidden" id="emailPrefsOk"></div>
+    <div class="hidden" id="emailPrefsBody">
+      <label class="al-form-toggle" style="margin-bottom:8px">
+        <input type="checkbox" id="emailDigestOptIn" />
+        <span>Send me the weekly digest (Mondays). Top movers from the past 7 days plus 1 emerging artist we noticed.</span>
+      </label>
+      <div class="hint" id="emailPrefsLastSent" style="font-size:0.7rem;color:var(--sub);margin-top:8px"></div>
+      <div class="row" style="margin-top:14px">
+        <button type="button" class="btn"     data-action="email-prefs-save">Save</button>
+        <button type="button" class="btn sec" data-action="email-prefs-close">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Phase 3d.3 — Refer-a-friend modal. Shows the user's stable share
+     link + Copy + stats (clicks / signups / conversions / coupons). -->
+<div class="auth-overlay hidden" id="referralsOverlay" data-action="referrals-overlay-bg">
+  <div class="auth-modal sec-modal">
+    <h2>Refer a friend</h2>
+    <div class="hint" id="referralsHint">
+      Share this link. For every friend who signs up and upgrades, you get a 1-month-free coupon for Pro.
+    </div>
+    <div class="err hidden" id="referralsErr"></div>
+    <div class="ok hidden" id="referralsOk"></div>
+    <div class="hidden" id="referralsBody">
+      <label style="font-size:0.78rem;color:var(--sub)">Your share link</label>
+      <div class="row" style="gap:6px;align-items:stretch;margin-top:4px">
+        <input type="text" id="referralsLink" readonly
+               style="flex:1;background:#0d0d0d;color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:0.82rem;font-family:monospace" />
+        <button type="button" class="btn" data-action="referrals-copy">Copy</button>
+      </div>
+      <div class="al-summary" style="margin-top:14px">
+        <span><b id="refStatClicks">0</b> clicks</span>
+        &nbsp;·&nbsp;
+        <span><b id="refStatSignups">0</b> signups</span>
+        &nbsp;·&nbsp;
+        <span><b id="refStatCoupons">0</b> coupons issued</span>
+        &nbsp;·&nbsp;
+        <span><b id="refStatConversions">0</b> redeemed</span>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button type="button" class="btn sec" data-action="referrals-close">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Reset-password view. Shown only when the URL is /reset?token=... — the
      onload handler flips it on and hides the main .container while this is up. -->
 <div class="reset-view hidden" id="resetView">
@@ -1040,6 +1110,26 @@
   <div class="status-bar" id="statusBar">
     <span class="dot loading" id="statusDot"></span>
     <span id="statusText">Fetching data from YouTube and Google Trends...</span>
+  </div>
+
+  <!-- Phase 3d.3 — Onboarding empty-state. Shown only when signed in,
+       no saved searches, no dismissal flag in localStorage. -->
+  <div class="onboarding-card hidden" id="onboardingCard">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+      <div>
+        <h3 style="margin:0 0 6px;font-size:1rem;color:var(--accent)">Welcome — here's how this works</h3>
+        <ol style="margin:0;padding-left:20px;color:var(--sub);font-size:0.85rem;line-height:1.6">
+          <li>Click an artist to see their stats + recent uploads</li>
+          <li>Click <b>+ Add to compare</b> to compare side-by-side</li>
+          <li>Click <b>Alerts</b> in the header to email yourself when an artist crosses a threshold</li>
+        </ol>
+        <p style="margin:10px 0 0;color:var(--sub);font-size:0.78rem">
+          We send a weekly digest of top movers — first one arrives Monday.
+          <a data-action="email-prefs-open" style="color:var(--accent);cursor:pointer">Manage preferences</a>
+        </p>
+      </div>
+      <button type="button" class="btn sec sm" data-action="onboarding-dismiss" style="white-space:nowrap">Got it</button>
+    </div>
   </div>
 
   <!-- Phase 3a.1 — Movers this week. Anonymous-OK; powered by
@@ -1381,9 +1471,19 @@ window.onload = async function() {
     history.replaceState(null, '', location.pathname);
   }
 
+  // Phase 3d.3 — capture ?ref=<token> before checkSession. We set the
+  // tx_ref cookie so the next signup attribution works server-side, fire
+  // a click-record (anonymous + idempotent within 24h-same-IP), and
+  // strip the param from the URL so refresh stays clean. Soft-fail by
+  // design — never let this throw out of onload.
+  captureReferralFromUrl();
+
   updateDemoBanner();
   await checkSession();     // fills authUser if a valid cookie exists
   renderAuthWidget();
+  // Phase 3d.3 — onboarding empty-state. Runs in the background; the
+  // card stays hidden if the user already has activity OR has dismissed.
+  maybeShowOnboarding();
 
   // Pull the live roster once we know the session state. Signed-out users
   // still see SEED_NAMES (loadRoster's 401 fallback) so the demo view works.
@@ -1520,6 +1620,17 @@ function wireStaticHandlers() {
         case 'alerts-delete':       deleteAlertRow(arg, t); break;
         case 'alerts-toggle':       toggleAlertEnabled(arg, t); break;
         case 'alerts-cancel-edit':  showAlertsView('list'); break;
+        // Phase 3d.2 — email-prefs modal
+        case 'email-prefs-open':       openEmailPrefs(); break;
+        case 'email-prefs-close':      closeEmailPrefs(); break;
+        case 'email-prefs-overlay-bg': if (ev.target === t) { closeEmailPrefs(); } break;
+        case 'email-prefs-save':       saveEmailPrefs(); break;
+        // Phase 3d.3 — referrals modal + onboarding dismissal
+        case 'referrals-open':         openReferrals(); break;
+        case 'referrals-close':        closeReferrals(); break;
+        case 'referrals-overlay-bg':   if (ev.target === t) { closeReferrals(); } break;
+        case 'referrals-copy':         copyReferralLink(); break;
+        case 'onboarding-dismiss':     dismissOnboarding(); break;
         case 'noop':              break;
       }
     });
@@ -1639,18 +1750,26 @@ function renderAuthWidget() {
   // signed-in/out lifecycle. Hidden until we know who the user is so we
   // don't flash a button that disappears the moment /api/auth/me 401s.
   var btnAlt = document.getElementById('btnAlerts');
+  // Phase 3d.2 + 3d.3 — Email-prefs + Refer-a-friend buttons. Same
+  // signed-in/out lifecycle as Alerts.
+  var btnEmail = document.getElementById('btnEmail');
+  var btnRefer = document.getElementById('btnReferral');
   if (authUser) {
     who.innerHTML = 'Signed in as <b>' + escapeHtml(authUser.email) + '</b>';
     btnOut.classList.remove('hidden');
     btnSec.classList.remove('hidden');
-    if (btnAlt) btnAlt.classList.remove('hidden');
+    if (btnAlt)   btnAlt.classList.remove('hidden');
+    if (btnEmail) btnEmail.classList.remove('hidden');
+    if (btnRefer) btnRefer.classList.remove('hidden');
     btnIn.classList.add('hidden');
     btnUp.classList.add('hidden');
   } else {
     who.innerHTML = '&nbsp;';
     btnOut.classList.add('hidden');
     btnSec.classList.add('hidden');
-    if (btnAlt) btnAlt.classList.add('hidden');
+    if (btnAlt)   btnAlt.classList.add('hidden');
+    if (btnEmail) btnEmail.classList.add('hidden');
+    if (btnRefer) btnRefer.classList.add('hidden');
     btnIn.classList.remove('hidden');
     btnUp.classList.remove('hidden');
   }
@@ -2996,6 +3115,223 @@ async function toggleAlertEnabled(id, t) {
   } finally {
     if (t) t.disabled = false;
   }
+}
+
+// ── EMAIL PREFERENCES (Phase 3d.2) ────────────────────────────────────────
+// One overlay (#emailPrefsOverlay) with a single switch for the weekly
+// digest. Backend: GET/PATCH /api/digest/preferences. Audited
+// server-side as digest.optin_changed.
+
+function setEmailPrefsErr(msg) {
+  var el = document.getElementById('emailPrefsErr');
+  el.textContent = msg || '';
+  el.classList.toggle('hidden', !msg);
+}
+function setEmailPrefsOk(msg) {
+  var el = document.getElementById('emailPrefsOk');
+  el.textContent = msg || '';
+  el.classList.toggle('hidden', !msg);
+}
+
+async function openEmailPrefs() {
+  setEmailPrefsErr(''); setEmailPrefsOk('');
+  document.getElementById('emailPrefsHint').textContent = 'Loading…';
+  document.getElementById('emailPrefsBody').classList.add('hidden');
+  document.getElementById('emailPrefsOverlay').classList.remove('hidden');
+  await checkSession();
+  if (!authUser) {
+    setEmailPrefsErr('You need to be signed in to manage email preferences.');
+    document.getElementById('emailPrefsHint').textContent = '';
+    return;
+  }
+  try {
+    var data = await proxyGet('/api/digest/preferences');
+    document.getElementById('emailDigestOptIn').checked = !!data.optedIn;
+    var lastSent = data.lastSentAt
+      ? 'Last digest sent: ' + new Date(data.lastSentAt).toLocaleString()
+      : 'You haven’t received a digest yet — first one arrives Monday.';
+    document.getElementById('emailPrefsLastSent').textContent = lastSent;
+    document.getElementById('emailPrefsHint').textContent = '';
+    document.getElementById('emailPrefsBody').classList.remove('hidden');
+  } catch (e) {
+    document.getElementById('emailPrefsHint').textContent = '';
+    setEmailPrefsErr((e && e.message) ? e.message : 'Couldn’t load your email preferences.');
+  }
+}
+
+function closeEmailPrefs() {
+  document.getElementById('emailPrefsOverlay').classList.add('hidden');
+}
+
+async function saveEmailPrefs() {
+  setEmailPrefsErr(''); setEmailPrefsOk('');
+  var optedIn = document.getElementById('emailDigestOptIn').checked;
+  try {
+    var r = await fetch(PROXY_BASE + '/api/digest/preferences', {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ opted_in: optedIn })
+    });
+    var body = await r.json().catch(function() { return {}; });
+    if (!r.ok) {
+      throw new Error((body && (body.message || body.error)) || ('HTTP ' + r.status));
+    }
+    setEmailPrefsOk(optedIn ? 'You’re subscribed to the weekly digest.' : 'You’ve unsubscribed.');
+  } catch (e) {
+    setEmailPrefsErr((e && e.message) ? e.message : 'Couldn’t save that preference.');
+  }
+}
+
+// ── REFERRALS (Phase 3d.3) ────────────────────────────────────────────────
+// One overlay with the user's stable share link + Copy + 4 stat numbers.
+// Backend: GET /api/referrals/me (auto-creates the row on first call).
+
+function setReferralsErr(msg) {
+  var el = document.getElementById('referralsErr');
+  el.textContent = msg || '';
+  el.classList.toggle('hidden', !msg);
+}
+function setReferralsOk(msg) {
+  var el = document.getElementById('referralsOk');
+  el.textContent = msg || '';
+  el.classList.toggle('hidden', !msg);
+}
+
+async function openReferrals() {
+  setReferralsErr(''); setReferralsOk('');
+  document.getElementById('referralsBody').classList.add('hidden');
+  document.getElementById('referralsHint').textContent =
+    'Share this link. For every friend who signs up and upgrades, you get a 1-month-free coupon for Pro.';
+  document.getElementById('referralsOverlay').classList.remove('hidden');
+  await checkSession();
+  if (!authUser) {
+    setReferralsErr('You need to be signed in to get a share link.');
+    return;
+  }
+  try {
+    var data = await proxyGet('/api/referrals/me');
+    document.getElementById('referralsLink').value = data.link || '';
+    var s = data.stats || {};
+    document.getElementById('refStatClicks').textContent      = s.clicks      || 0;
+    document.getElementById('refStatSignups').textContent     = s.signups     || 0;
+    document.getElementById('refStatCoupons').textContent     = s.couponsIssued || 0;
+    document.getElementById('refStatConversions').textContent = s.conversions || 0;
+    document.getElementById('referralsBody').classList.remove('hidden');
+  } catch (e) {
+    setReferralsErr((e && e.message) ? e.message : 'Couldn’t load your referral link.');
+  }
+}
+
+function closeReferrals() {
+  document.getElementById('referralsOverlay').classList.add('hidden');
+}
+
+function copyReferralLink() {
+  var el = document.getElementById('referralsLink');
+  var url = el.value || '';
+  if (!url) { return; }
+  // Reuse the share-toast helper from Phase 3c.4 if available;
+  // otherwise show a quick inline OK on the modal.
+  if (typeof copyToClipboard === 'function') {
+    copyToClipboard(url).then(function(ok) {
+      if (typeof showShareToast === 'function') {
+        showShareToast(ok ? ('Link copied · ' + url) : url, !ok);
+      } else if (ok) {
+        setReferralsOk('Link copied to clipboard.');
+      } else {
+        setReferralsErr('Couldn’t copy. Select the link manually.');
+      }
+    });
+  } else {
+    el.select();
+    try {
+      document.execCommand('copy');
+      setReferralsOk('Link copied to clipboard.');
+    } catch (_) {
+      setReferralsErr('Couldn’t copy. Select the link manually.');
+    }
+  }
+}
+
+// ── ONBOARDING (Phase 3d.3) ───────────────────────────────────────────────
+// Show the empty-state card when the signed-in user has not previously
+// dismissed it AND has no saved-search activity yet. Dismissal stored
+// in localStorage so it survives page reloads but doesn't follow the
+// user across devices (= they'll see it once per device, which is the
+// right level of friction for a low-stakes hint).
+
+var ONBOARDING_KEY = 'tx_onboarded';
+
+function maybeShowOnboarding() {
+  var card = document.getElementById('onboardingCard');
+  if (!card) return;
+  if (!authUser) { card.classList.add('hidden'); return; }
+  var dismissed = false;
+  try { dismissed = localStorage.getItem(ONBOARDING_KEY) === '1'; } catch (_) {}
+  if (dismissed) { card.classList.add('hidden'); return; }
+  // Quick check: do they have any saved searches? If yes, they've used
+  // the product enough that the welcome card is noise.
+  proxyGet('/api/saved-searches').then(function(body) {
+    var hasActivity = body && Array.isArray(body.rows) && body.rows.length > 0;
+    if (hasActivity) {
+      card.classList.add('hidden');
+    } else {
+      card.classList.remove('hidden');
+    }
+  }).catch(function() {
+    // 401 / network blip — keep the card hidden rather than flash it.
+    card.classList.add('hidden');
+  });
+}
+
+function dismissOnboarding() {
+  try { localStorage.setItem(ONBOARDING_KEY, '1'); } catch (_) {}
+  var card = document.getElementById('onboardingCard');
+  if (card) card.classList.add('hidden');
+}
+
+// ── REFERRAL ?ref CAPTURE (Phase 3d.3) ────────────────────────────────────
+// When the URL carries ?ref=<token>, we:
+//   1. Set the tx_ref cookie so the next signup picks it up server-side
+//      (routes/auth.js#signup reads req.cookies.tx_ref and persists
+//      users.referrer_token).
+//   2. POST /api/referrals/click to record the click for the referrer's
+//      stats panel. Anonymous; the route is public + idempotent within
+//      24h-same-(token, ip).
+//   3. Strip the ?ref= param from the URL via history.replaceState so a
+//      shared link doesn't keep firing click-records on refresh.
+//
+// Cookie has lax SameSite + 30-day expiry; not HttpOnly because we set
+// it client-side (server reads it on signup which is same-origin).
+// Path=/ so every page sees it.
+function captureReferralFromUrl() {
+  try {
+    var params = new URLSearchParams(location.search);
+    var ref = params.get('ref');
+    if (!ref) return;
+    if (!/^[A-Za-z0-9_\-]{6,32}$/.test(ref)) return; // shape sanity
+    // Cookie set: 30d, SameSite=Lax (default), path=/.
+    var thirtyDays = 30 * 24 * 60 * 60;
+    var expires = new Date(Date.now() + thirtyDays * 1000).toUTCString();
+    document.cookie = 'tx_ref=' + encodeURIComponent(ref)
+      + '; path=/; max-age=' + thirtyDays
+      + '; expires=' + expires
+      + '; SameSite=Lax';
+    // Strip the param so refresh doesn't keep the URL noisy + prevent
+    // accidental double-record next page load. Keep other params intact.
+    params.delete('ref');
+    var qs = params.toString();
+    var newUrl = location.pathname + (qs ? ('?' + qs) : '') + location.hash;
+    history.replaceState(null, '', newUrl);
+    // Fire-and-forget click record. Soft-fail; don't surface anything.
+    fetch(PROXY_BASE + '/api/referrals/click', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: ref })
+    }).catch(function() { /* best-effort */ });
+  } catch (_) { /* never let this throw out of onload */ }
 }
 
 // ── RESET VIEW ────────────────────────────────────────────────────────────
