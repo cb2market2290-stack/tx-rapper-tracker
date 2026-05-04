@@ -384,6 +384,45 @@ function renderComparePage({ artistsWithHistory, appHost, canonical, cspNonce })
 }
 
 // ── routes ──────────────────────────────────────────────────────────────
+//
+// Cache-Control posture (added in the Phase 3.5+ edge-cache pass):
+//
+//   /a/:slug + /compare/:slugs:
+//     Cache-Control: public, s-maxage=300, max-age=60, stale-while-revalidate=600
+//
+//     s-maxage=300 — Cloudflare's edge cache holds the response for 5
+//                    minutes. Snapshots refresh daily so 5 min is well
+//                    inside the freshness window; viral-scale traffic
+//                    is absorbed by the edge for 99%+ of requests.
+//     max-age=60   — browsers + intermediaries cache for 1 minute. Keeps
+//                    a quick refresh from re-fetching, doesn't lock the
+//                    user out of seeing fresh data after the snapshot
+//                    cron runs.
+//     stale-while-revalidate=600 — clients can serve a stale response
+//                    while fetching a fresh one in the background. Smooth
+//                    UX during a cache-population race.
+//
+//   /robots.txt:
+//     Cache-Control: public, max-age=3600
+//     Static content. 1 hour cache means a robots edit takes effect
+//     within an hour for all crawlers.
+//
+//   /sitemap.xml:
+//     Cache-Control: public, s-maxage=3600, max-age=600
+//     Refreshes when an artist is added/hidden. 1 hour at the edge,
+//     10 minutes in browsers. New artists are discoverable to crawlers
+//     within an hour without needing manual cache-purge.
+//
+// 4xx responses (404 unknown slug, 400 too-many-slugs) DO NOT carry
+// Cache-Control. Cloudflare's default 4xx caching is short, and we
+// don't want a temporarily-hidden artist to stay 404'd at the edge
+// past when the admin flips is_public back on.
+
+// Cache-control header values, kept as named constants so the cache
+// posture is documented + greppable.
+const CACHE_PUBLIC_PAGE     = 'public, s-maxage=300, max-age=60, stale-while-revalidate=600';
+const CACHE_ROBOTS          = 'public, max-age=3600';
+const CACHE_SITEMAP         = 'public, s-maxage=3600, max-age=600';
 
 router.get('/a/:slug', async (req, res, next) => {
   try {
@@ -406,6 +445,7 @@ router.get('/a/:slug', async (req, res, next) => {
       canonical: `${origin}/a/${slug}`,
       cspNonce: res.locals.cspNonce,
     });
+    res.set('Cache-Control', CACHE_PUBLIC_PAGE);
     res.type('html').send(html);
   } catch (err) {
     next(err);
@@ -447,6 +487,7 @@ router.get('/compare/:slugs', async (req, res, next) => {
       canonical: `${origin}/compare/${parts.join('+')}`,
       cspNonce: res.locals.cspNonce,
     });
+    res.set('Cache-Control', CACHE_PUBLIC_PAGE);
     res.type('html').send(html);
   } catch (err) {
     next(err);
@@ -455,6 +496,7 @@ router.get('/compare/:slugs', async (req, res, next) => {
 
 router.get('/robots.txt', (req, res) => {
   const origin = originFor(req);
+  res.set('Cache-Control', CACHE_ROBOTS);
   res.type('text/plain').send(
     [
       'User-agent: *',
@@ -487,6 +529,7 @@ router.get('/sitemap.xml', async (req, res, next) => {
       `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
       urls +
       `\n</urlset>\n`;
+    res.set('Cache-Control', CACHE_SITEMAP);
     res.type('application/xml').send(xml);
   } catch (err) {
     next(err);
