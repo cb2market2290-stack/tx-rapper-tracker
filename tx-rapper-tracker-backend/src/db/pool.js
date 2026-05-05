@@ -15,11 +15,14 @@ import { logger } from '../lib/logger.js';
 
 const { Pool } = pg;
 
-// A small pool is plenty for a personal-scale app. Bump `max` if we start
-// seeing "too many clients" logs under load.
+// Pool sized for the realistic load on this stack: snapshot cron +
+// digest cron + a few hundred concurrent dashboard / public-page
+// users. 30 is comfortable headroom against Postgres' default
+// max_connections=100; we keep ~70 for psql, the audio-extract
+// worker, and other ad-hoc tools.
 export const pool = new Pool({
   connectionString: config.databaseUrl,
-  max: 10,
+  max: 30,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 5_000,
   // ssl: undefined by default — local dev is plaintext. For managed Postgres
