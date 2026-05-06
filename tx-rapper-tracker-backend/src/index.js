@@ -152,6 +152,7 @@ app.use('/api/digest', digestRoutes);
 // the router); /click is anonymous (used by app.html's onload when
 // ?ref=<token> hits the URL).
 app.use('/api/referrals', referralsRoutes);
+app.use('/api/pwa', pwaRoutes);
 
 // Phase 3c — public, un-gated, server-rendered profile + compare pages,
 // plus /robots.txt and /sitemap.xml. Mounted BEFORE the static-frontend
