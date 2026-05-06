@@ -162,6 +162,9 @@ app.use('/api/pwa', pwaRoutes);
 // 404 even though the artist is still in the in-app roster.
 app.use('/', publicRoutes);
 
+// --- PWA static files -----------------------------------------------
+app.use(express.static(path.join(path.dirname(fileURLToPath(import.meta.url)), "../public")));
+
 // --- Frontend static files ------------------------------------------------
 // Serve the two HTML pages from the same origin as the API. Resolves
 // SameSite cookie + CORS grief — there's just one origin now. Everything
