@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS api_tokens (
   id           SERIAL PRIMARY KEY,
-  user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   token_hash   TEXT NOT NULL UNIQUE,
   prefix       TEXT NOT NULL,
   label        TEXT,
