@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CMC Micro-Cap Analyzer - cb2market</title>
+<style>
+:root{--bg:#fff;--bg2:#f5f5f4;--bg3:#efefed;--txt:#1a1a1a;--txt2:#6b7280;--bdr:rgba(0,0,0,0.12);--bdr2:rgba(0,0,0,0.22);--grn:#1D9E75;--grn2:#E1F5EE;--grn3:#085041;--amb:#BA7517;--amb2:#FAEEDA;--amb3:#633806;--red:#E24B4A;--blu2:#E6F1FB;--blu3:#0C447C;--blu4:#B5D4F4;--r:8px;--rl:12px}
+@media(prefers-color-scheme:dark){:root{--bg:#1c1c1e;--bg2:#2c2c2e;--bg3:#3a3a3c;--txt:#f2f2f7;--txt2:#98989e;--bdr:rgba(255,255,255,0.12);--bdr2:rgba(255,255,255,0.22);--grn2:#0a3d2b;--grn3:#5DCAA5;--amb2:#3d2a00;--amb3:#FAC775;--blu2:#0a2540;--blu3:#85B7EB;--blu4:#185FA5}}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg3);color:var(--txt);min-height:100vh}
+.shell{max-width:980px;margin:0 auto;padding:16px;background:var(--bg);min-height:100vh}
+.brand{display:flex;align-items:center;justify-content:space-between;padding:12px 0 14px;border-bottom:.5px solid var(--bdr);margin-bottom:14px;flex-wrap:wrap;gap:8px}
+.brand h1{font-size:16px;font-weight:600}.brand p{font-size:11px;color:var(--txt2)}
+.v{font-size:11px;padding:3px 10px;border-radius:20px;background:var(--blu2);color:var(--blu3);font-weight:500}
+.nav{display:flex;overflow-x:auto;gap:2px;margin-bottom:14px;border-bottom:.5px solid var(--bdr);scrollbar-width:none}
+.nav::-webkit-scrollbar{display:none}
+.nb{flex-shrink:0;font-size:13px;padding:8px 15px;border:none;background:none;cursor:pointer;color:var(--txt2);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;position:relative}
+.nb.active{color:var(--grn);border-bottom-color:var(--grn);font-weight:500}.nb:hover{color:var(--txt)}
+.dot{position:absolute;top:6px;right:4px;width:6px;height:6px;border-radius:50%;background:var(--red);display:none}.dot.on{display:block}
+.pg{display:none}.pg.active{display:block}
+.tb{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px}
+.pill{font-size:11px;padding:3px 9px;border-radius:20px}.pill.live{background:var(--grn2);color:var(--grn3)}.pill.off{background:var(--bg2);color:var(--txt2)}
+.mets{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+@media(max-width:500px){.mets{grid-template-columns:repeat(2,1fr)}}
+.met{background:var(--bg2);border-radius:var(--r);padding:10px 12px}
+.ml{font-size:11px;color:var(--txt2);margin-bottom:3px}.mv{font-size:18px;font-weight:500;color:var(--txt)}.mv.g{color:var(--grn)}.mv.a{color:var(--amb)}.mv.r{color:var(--red)}
+.ctrl{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center}
+input,select{font-size:13px;padding:7px 10px;border:.5px solid var(--bdr2);border-radius:var(--r);background:var(--bg);color:var(--txt);outline:none}
+input:focus,select:focus{border-color:var(--grn)}.ctrl input{flex:1;min-width:120px}
+.btn{font-size:13px;padding:7px 13px;border:.5px solid var(--bdr2);border-radius:var(--r);background:var(--bg);color:var(--txt);cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--bg2)}.btn.g{background:var(--grn);color:#fff;border-color:var(--grn)}.btn.g:hover{background:#0F6E56}.btn.sm{padding:3px 9px;font-size:12px}
+.tw{border:.5px solid var(--bdr);border-radius:var(--rl);overflow:hidden;margin-bottom:12px;overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12px;min-width:700px}
+th{padding:8px 10px;text-align:left;font-weight:500;color:var(--txt2);font-size:11px;background:var(--bg2);border-bottom:.5px solid var(--bdr)}
+td{padding:8px 10px;border-bottom:.5px solid var(--bdr);color:var(--txt);vertical-align:middle}
+tr:last-child td{border-bottom:none}tr:hover td{background:var(--bg2)}
+.sig{display:inline-block;padding:2px 6px;border-radius:var(--r);font-size:10px;font-weight:500}
+.fire{background:var(--amb2);color:var(--amb3)}.strong{background:var(--grn2);color:var(--grn3)}.watch{background:var(--blu2);color:var(--blu3)}.weak{background:var(--bg2);color:var(--txt2)}
+.up{color:var(--grn)}.dn{color:var(--red)}
+.bar{width:48px;height:5px;background:var(--bdr);border-radius:3px;display:inline-block;vertical-align:middle;margin-right:4px;overflow:hidden}.bf{height:100%;border-radius:3px}
+.stat{text-align:center;padding:1.5rem;color:var(--txt2);font-size:13px}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid var(--bdr2);border-top-color:var(--grn);border-radius:50%;animation:sp .8s linear infinite;vertical-align:middle;margin-right:5px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.card{background:var(--bg);border:.5px solid var(--bdr);border-radius:var(--rl);padding:1rem;margin-bottom:10px}
+.dg{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+@media(max-width:480px){.dg{grid-template-columns:repeat(2,1fr)}}
+.cw{position:relative;width:100%;height:190px;margin-bottom:10px}
+.notif{background:var(--grn2);border:.5px solid #9FE1CB;border-radius:var(--r);padding:9px 14px;margin-bottom:10px;font-size:13px;color:var(--grn3);display:none}.notif.on{display:block}
+.sb{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:.5px solid var(--bdr);flex-wrap:wrap}.sb:last-child{border-bottom:none}
+.str{flex:1;height:7px;background:var(--bdr);border-radius:4px;overflow:hidden;min-width:80px}.sf{height:100%;border-radius:4px}
+.stg{font-size:10px;padding:2px 7px;border-radius:20px;font-weight:500}.hot{background:var(--amb2);color:var(--amb3)}.bullish{background:var(--grn2);color:var(--grn3)}.neutral{background:var(--bg2);color:var(--txt2)}.bearish{background:#FCEBEB;color:#501313}
+.pc{background:var(--bg);border:.5px solid var(--bdr);border-radius:var(--rl);padding:.875rem 1rem;margin-bottom:8px}
+.pg2{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px}
+@media(max-width:480px){.pg2{grid-template-columns:repeat(2,1fr)}}
+.pm{background:var(--bg2);border-radius:var(--r);padding:7px 9px}.pml{font-size:10px;color:var(--txt2);margin-bottom:2px}.pmv{font-size:12px;font-weight:500;color:var(--txt)}
+.af{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.cw2{position:relative;width:100%;height:140px;margin-bottom:10px}
+.svb{background:var(--bg2);border-radius:var(--r);padding:7px 10px;margin-bottom:10px;font-size:12px;color:var(--txt2);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px}
+.ali{background:var(--bg);border:.5px solid var(--bdr);border-radius:var(--rl);padding:10px 14px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px}.ali.fired{border-color:#9FE1CB;background:var(--grn2)}
+.tr{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:.5px solid var(--bdr)}.tr:last-child{border-bottom:none}
+.key-box{background:var(--blu2);border:.5px solid var(--blu4);border-radius:var(--rl);padding:12px 14px;margin-bottom:12px}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="brand">
+    <div><h1>CMC Micro-Cap Analyzer</h1><p>cb2market wealth scanner</p></div>
+    <span class="v">v1</span>
+  </div>
+  <div class="nav">
+    <button class="nb active" onclick="sP('scanner',this)">Scanner</button>
+    <button class="nb" onclick="sP('sentiment',this)">Sentiment</button>
+    <button class="nb" onclick="sP('portfolio',this)">Portfolio</button>
+    <button class="nb" onclick="sP('alerts',this)">Alerts<span class="dot" id="aldot"></span></button>
+    <button class="nb" onclick="sP('settings',this)">Settings</button>
+  </div>
+  <div class="notif" id="notif"></div>
+
+  <!-- SCANNER -->
+  <div class="pg active" id="pg-scanner">
+    <div class="tb">
+      <span style="font-size:14px;font-weight:500">Live micro-cap scanner</span>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span id="cd" style="font-size:11px;color:var(--txt2)">-</span>
+        <span id="lp" class="pill off">Offline</span>
+        <button class="btn sm" id="nbtn" onclick="rqN()">Enable alerts</button>
+        <button class="btn sm" id="abtn" onclick="tgAuto()">Auto-refresh</button>
+        <button class="btn g" onclick="doScan()">Scan CMC now</button>
+      </div>
+    </div>
+    <div class="mets">
+      <div class="met"><div class="ml">Total returned</div><div class="mv" id="m1">-</div></div>
+      <div class="met"><div class="ml">In MCap range</div><div class="mv g" id="m2">-</div></div>
+      <div class="met"><div class="ml">Fire signals</div><div class="mv a" id="m3">-</div></div>
+      <div class="met"><div class="ml">Last scan</div><div class="mv" style="font-size:11px;padding-top:4px" id="m4">-</div></div>
+    </div>
+    <div class="ctrl">
+      <input id="q" placeholder="Search coin or name..." oninput="rScan()"/>
+      <select id="srt" onchange="rScan()">
+        <option value="score">Score</option>
+        <option value="sent">Sentiment</option>
+        <option value="chg">24h change</option>
+        <option value="chg7">7d change</option>
+        <option value="vol">Volume</option>
+        <option value="mc">Market cap</option>
+      </select>
+      <select id="sf" onchange="rScan()">
+        <option value="all">All signals</option>
+        <option value="fire">Fire</option>
+        <option value="strong">Strong</option>
+        <option value="watch">Watch</option>
+      </select>
+    </div>
+    <div class="tw">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:24px">#</th>
+            <th style="width:80px">Coin</th>
+            <th style="width:100px">Price (USD)</th>
+            <th style="width:55px">24h</th>
+            <th style="width:55px">7d</th>
+            <th style="width:72px">Volume</th>
+            <th style="width:72px">MCap</th>
+            <th style="width:76px">Score</th>
+            <th style="width:84px">Sentiment</th>
+            <th style="width:56px">Signal</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="stbody">
+          <tr><td colspan="11" class="stat">Click &ldquo;Scan CMC now&rdquo; to load live data &mdash; add your API key in Settings first</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <!-- Coin detail panel -->
+    <div class="card" id="dc" style="display:none">
+      <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:10px">
+        <div>
+          <span style="font-size:15px;font-weight:600" id="dc-s">-</span>
+          <span style="font-size:11px;color:var(--txt2);margin-left:6px" id="dc-n">-</span>
+        </div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          <a id="dc-b" class="btn sm" href="#" target="_blank" style="text-decoration:none;color:var(--blu3);background:var(--blu2);border-color:var(--blu4)">View on CMC</a>
+          <button class="btn sm" onclick="addPort()">+Portfolio</button>
+          <button class="btn sm" onclick="setAl(cur)">Alert</button>
+          <button class="btn sm" onclick="closeD()">Close</button>
+        </div>
+      </div>
+      <div class="dg">
+        <div class="met"><div class="ml">Price (USD)</div><div class="mv" style="font-size:11px;word-break:break-all" id="dc-p">-</div></div>
+        <div class="met"><div class="ml">Market Cap</div><div class="mv" style="font-size:13px" id="dc-mc">-</div></div>
+        <div class="met"><div class="ml">X to $1</div><div class="mv a" id="dc-m">-</div></div>
+        <div class="met"><div class="ml">Score</div><div class="mv g" id="dc-sc">-</div></div>
+        <div class="met"><div class="ml">CMC Rank</div><div class="mv" style="font-size:14px" id="dc-rk">-</div></div>
+        <div class="met"><div class="ml">24h Volume</div><div class="mv" style="font-size:13px" id="dc-v">-</div></div>
+      </div>
+      <div id="dc-sent" style="margin-bottom:10px"></div>
+      <div style="font-size:11px;color:var(--txt2);margin-bottom:5px" id="dc-src">7-day chart</div>
+      <div class="cw"><canvas id="ohlcv-c"></canvas></div>
+    </div>
+  </div>
+
+  <!-- SENTIMENT -->
+  <div class="pg" id="pg-sentiment">
+    <div style="font-size:14px;font-weight:500;margin-bottom:10px">Market sentiment</div>
+    <div class="mets">
+      <div class="met"><div class="ml">Market mood</div><div class="mv" style="font-size:14px" id="sm-m">-</div></div>
+      <div class="met"><div class="ml">Avg sentiment</div><div class="mv a" id="sm-a">-</div></div>
+      <div class="met"><div class="ml">Very bullish</div><div class="mv g" id="sm-h">-</div></div>
+      <div class="met"><div class="ml">Top movers</div><div class="mv" id="sm-c">-</div></div>
+    </div>
+    <div class="card"><div style="font-size:13px;font-weight:500;margin-bottom:10px">Top sentiment scores</div><div id="sent-list"><div class="stat">Run a scan first</div></div></div>
+    <div class="card"><div style="font-size:13px;font-weight:500;margin-bottom:10px">CoinGecko trending coins</div><div id="trend-list"><div class="stat"><span class="spin"></span>Loading...</div></div></div>
+  </div>
+
+  <!-- PORTFOLIO -->
+  <div class="pg" id="pg-portfolio">
+    <div class="svb"><span id="sst">Portfolio saves in browser (localStorage)</span><div style="display:flex;gap:6px"><button class="btn sm" onclick="expCSV()">CSV</button><button class="btn sm" onclick="expAll()">Backup</button><button class="btn sm" onclick="impAll()">Import</button></div></div>
+    <div class="mets">
+      <div class="met"><div class="ml">Total invested</div><div class="mv" id="p-i">$0.00</div></div>
+      <div class="met"><div class="ml">Current value</div><div class="mv g" id="p-v">$0.00</div></div>
+      <div class="met"><div class="ml">P&amp;L</div><div class="mv" id="p-pnl">$0.00</div></div>
+      <div class="met"><div class="ml">Best performer</div><div class="mv g" style="font-size:13px" id="p-b">-</div></div>
+    </div>
+    <div class="cw2" id="pcw" style="display:none"><canvas id="pc"></canvas></div>
+    <div class="af">
+      <input id="pa-s" placeholder="Symbol" style="max-width:90px"/>
+      <input id="pa-a" placeholder="$ invested" type="number" style="max-width:95px"/>
+      <input id="pa-q" placeholder="Qty" type="number" style="max-width:85px"/>
+      <button class="btn g" onclick="addPM()">Add position</button>
+      <button class="btn" onclick="refP()">Refresh</button>
+      <button class="btn" onclick="clrP()">Clear all</button>
+    </div>
+    <div id="plist"><div class="stat">No positions yet</div></div>
+  </div>
+
+  <!-- ALERTS -->
+  <div class="pg" id="pg-alerts">
+    <div class="svb"><span>Alerts save in browser (localStorage)</span><button class="btn sm" onclick="clrFired()">Clear fired</button></div>
+    <div class="af">
+      <input id="al-s" placeholder="Symbol (e.g. PEPE)" style="max-width:150px"/>
+      <input id="al-m" placeholder="Alert at Nx" type="number" style="max-width:120px"/>
+      <button class="btn g" onclick="addAl()">Add alert</button>
+    </div>
+    <div id="alist"><div class="stat">No alerts yet</div></div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="pg" id="pg-settings">
+    <div class="key-box">
+      <div style="font-size:13px;font-weight:600;margin-bottom:4px">CoinMarketCap API Key <span id="key-status" style="font-size:11px;font-weight:400;color:var(--txt2)">not set</span></div>
+      <div style="font-size:11px;color:var(--blu3);margin-bottom:10px">Free key at <a href="https://coinmarketcap.com/api/" target="_blank" style="color:var(--blu3)">coinmarketcap.com/api</a> &mdash; Basic plan is free, 10K calls/month.</div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <input id="cmc-key" type="password" placeholder="Enter API key..." style="flex:1;min-width:200px;max-width:380px"/>
+        <button class="btn g" onclick="saveKey()">Save key</button>
+        <button class="btn" onclick="toggleKeyVis()">Show/Hide</button>
+      </div>
+    </div>
+    <div class="card">
+      <div style="font-size:13px;font-weight:500;margin-bottom:8px">Push notifications</div>
+      <div style="font-size:12px;color:var(--txt2);margin-bottom:10px">Grant browser permission for desktop alerts when price targets hit.</div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+        <button class="btn" id="nbtn2" onclick="rqN()">Request permission</button>
+        <span id="nst" style="font-size:12px;color:var(--txt2)">-</span>
+      </div>
+      <div style="font-size:13px;font-weight:500;margin-bottom:8px">Scan settings</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <label style="font-size:12px;color:var(--txt2);min-width:160px">Refresh interval</label>
+          <select id="iv" onchange="scIv=+this.value"><option value="60">1 min</option><option value="300" selected>5 min</option><option value="600">10 min</option><option value="1800">30 min</option></select>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <label style="font-size:12px;color:var(--txt2);min-width:160px">Min market cap (USD)</label>
+          <input id="mn-mc" type="number" value="100000" style="max-width:160px"/>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <label style="font-size:12px;color:var(--txt2);min-width:160px">Max market cap (USD)</label>
+          <input id="mx-mc" type="number" value="10000000" style="max-width:160px"/>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <label style="font-size:12px;color:var(--txt2);min-width:160px">Results per scan</label>
+          <select id="lim"><option value="200" selected>200 coins</option><option value="500">500 coins</option><option value="1000">1000 coins</option></select>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn g" onclick="showN('Settings saved')">Save</button>
+        <button class="btn" onclick="expAll()">Export data</button>
+        <button class="btn" onclick="impAll()">Import</button>
+        <button class="btn" style="color:var(--red)" onclick="nukeAll()">Wipe all</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
