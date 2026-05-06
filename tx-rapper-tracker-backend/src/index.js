@@ -42,6 +42,8 @@ import digestRoutes from './routes/digest.js';
 import referralsRoutes from './routes/referrals.js';
 import { buildRouter as buildPaymentsRouter } from './routes/payments.js';
 import { closePool } from './db/pool.js';
+import pwaRoutes from './routes/pwa.js';
+import { pwaHeaders } from './middleware/pwaHeaders.js';
 
 const app = express();
 
@@ -53,6 +55,7 @@ app.disable('x-powered-by');
 // --- Platform middleware ---------------------------------------------------
 // Phase 3.5.2 — CSP nonce middleware MUST run before securityHeaders() so
 // res.locals.cspNonce is populated when helmet builds the CSP header.
+app.use(pwaHeaders);
 app.use(cspNonce());
 app.use(securityHeaders());
 app.use(corsMiddleware());
