@@ -42,6 +42,9 @@ import digestRoutes from './routes/digest.js';
 import referralsRoutes from './routes/referrals.js';
 import { buildRouter as buildPaymentsRouter } from './routes/payments.js';
 import { closePool } from './db/pool.js';
+import apiTokensRoutes from './routes/apiTokens.js';
+import exportRoutes from './routes/export.js';
+import { apiKeyAuth } from './middleware/apiKeyAuth.js';
 import pwaRoutes from './routes/pwa.js';
 import { pwaHeaders } from './middleware/pwaHeaders.js';
 
@@ -56,6 +59,7 @@ app.disable('x-powered-by');
 // Phase 3.5.2 — CSP nonce middleware MUST run before securityHeaders() so
 // res.locals.cspNonce is populated when helmet builds the CSP header.
 app.use(pwaHeaders);
+app.use(apiKeyAuth());
 app.use(cspNonce());
 app.use(securityHeaders());
 app.use(corsMiddleware());
@@ -153,6 +157,8 @@ app.use('/api/digest', digestRoutes);
 // ?ref=<token> hits the URL).
 app.use('/api/referrals', referralsRoutes);
 app.use('/api/pwa', pwaRoutes);
+app.use('/api/tokens', apiTokensRoutes);
+app.use('/api/export', exportRoutes);
 
 // Phase 3c — public, un-gated, server-rendered profile + compare pages,
 // plus /robots.txt and /sitemap.xml. Mounted BEFORE the static-frontend
