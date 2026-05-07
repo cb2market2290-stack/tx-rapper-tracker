@@ -44,6 +44,8 @@ import { buildRouter as buildPaymentsRouter } from './routes/payments.js';
 import { closePool } from './db/pool.js';
 import spotifyRoutes from './routes/spotify.js';
 import { startSpotifyScheduler } from './services/spotifyScheduler.js';
+import tiktokRoutes from './routes/tiktok.js';
+import { startTikTokScheduler } from './services/tiktokScheduler.js';
 import apiTokensRoutes from './routes/apiTokens.js';
 import exportRoutes from './routes/export.js';
 import { apiKeyAuth } from './middleware/apiKeyAuth.js';
@@ -160,6 +162,7 @@ app.use('/api/digest', digestRoutes);
 app.use('/api/referrals', referralsRoutes);
 app.use('/api/pwa', pwaRoutes);
 app.use('/api/spotify', spotifyRoutes);
+app.use('/api/tiktok', tiktokRoutes);
 app.use('/api/tokens', apiTokensRoutes);
 app.use('/api/export', exportRoutes);
 
@@ -241,6 +244,7 @@ app.use(errorHandler);
 
 // --- Boot ------------------------------------------------------------------
 const server = startSpotifyScheduler();
+startTikTokScheduler();
 app.listen(config.port, () => {
   logger.info({ config: redacted() }, `listening on :${config.port}`);
 });
