@@ -2,7 +2,7 @@ ALTER TABLE artists ADD COLUMN IF NOT EXISTS spotify_id TEXT;
 CREATE INDEX IF NOT EXISTS artists_spotify_id_idx ON artists(spotify_id);
 CREATE TABLE IF NOT EXISTS spotify_stats (
   id SERIAL PRIMARY KEY,
-  artist_id INTEGER NOT NULL REFERENCES artists(id) ON DELETE CASCADE,
+  artist_id UUID NOT NULL REFERENCES artists(id) ON DELETE CASCADE,
   collected_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   followers INTEGER,
   popularity SMALLINT,
