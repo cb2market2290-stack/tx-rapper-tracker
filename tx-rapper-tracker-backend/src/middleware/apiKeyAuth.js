@@ -1,5 +1,5 @@
 import { verifyToken } from '../services/apiTokens.js';
-import { sql } from '../db/pool.js';
+import { query } from '../db/pool.js';
 
 export function apiKeyAuth() {
   return async (req, res, next) => {
@@ -8,7 +8,7 @@ export function apiKeyAuth() {
     try {
       const token = await verifyToken(key);
       if (!token) return next();
-      const [user] = await sql`SELECT * FROM users WHERE id = ${token.user_id}`;
+      const { rows: urows } = await query('SELECT * FROM users WHERE id = $1', [token.user_id]); const user = urows[0];
       if (user) req.user = user;
     } catch {
       // Don't block request on token lookup failure
